@@ -2,13 +2,8 @@ use std::convert;
 use std::io::{self, Read, Write};
 use std::net;
 
-mod client;
-mod error;
-mod protocol;
-mod server;
-
-use self::client::HttpClient;
-use self::server::HttpServer;
+use http_io::client::HttpClient;
+use http_io::server::HttpServer;
 
 fn client_main(mut args: std::env::Args) {
     let host = args.next().unwrap_or("www.google.com".into());
