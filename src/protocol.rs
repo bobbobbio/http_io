@@ -605,7 +605,6 @@ impl HttpResponse {
         }
     }
 
-    #[cfg(test)]
     pub fn status(&self) -> HttpStatus {
         self.status
     }

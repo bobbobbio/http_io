@@ -1,5 +1,5 @@
-use crate::error::Result;
-use crate::protocol::{CrLfStream, HttpMethod, HttpRequest, HttpResponse};
+use crate::error::{Error, Result};
+use crate::protocol::{CrLfStream, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
 use std::io;
 use std::io::Read;
 
@@ -140,9 +140,13 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         HttpClient { socket }
     }
 
-    pub fn get(mut self, host: String, uri: String) -> Result<(HttpResponse, HttpBody<S>)> {
-        let mut request = HttpRequest::new(HttpMethod::Get, uri);
-        request.add_header("Host", host);
+    pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
+        mut self,
+        host: S1,
+        uri: S2,
+    ) -> Result<(HttpResponse, HttpBody<S>)> {
+        let mut request = HttpRequest::new(HttpMethod::Get, uri.as_ref());
+        request.add_header("Host", host.as_ref());
         request.add_header("User-Agent", "fuck/bitches");
         request.add_header("Accept", "*/*");
         write!(self.socket, "{}", request)?;
@@ -164,4 +168,19 @@ impl<S: io::Read + io::Write> HttpClient<S> {
             Ok((response, HttpBody::ReadTilClose(body)))
         }
     }
+}
+
+pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
+    host: S1,
+    uri: S2,
+) -> Result<HttpBody<std::net::TcpStream>> {
+    let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
+    let c = HttpClient::new(s);
+    let (response, body_stream) = c.get(host, uri.as_ref())?;
+
+    if response.status() != HttpStatus::OK {
+        return Err(Error::UnexpectedStatus(response.status()));
+    }
+
+    Ok(body_stream)
 }

@@ -1,3 +1,4 @@
+use crate::protocol::HttpStatus;
 use std::convert;
 use std::error;
 use std::fmt;
@@ -12,6 +13,7 @@ pub enum Error {
     Utf8Error(str::Utf8Error),
     IoError(io::Error),
     UnexpectedEof(String),
+    UnexpectedStatus(HttpStatus),
 }
 
 pub type Result<R> = std::result::Result<R, Error>;
@@ -30,6 +32,7 @@ impl error::Error for Error {
             Error::Utf8Error(e) => Some(e),
             Error::ParseIntError(e) => Some(e),
             Error::UnexpectedEof(_) => None,
+            Error::UnexpectedStatus(_) => None,
         }
     }
 }

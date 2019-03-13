@@ -1,5 +1,5 @@
 pub mod client;
 pub mod server;
 
-mod error;
+pub mod error;
 mod protocol;

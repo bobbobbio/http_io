@@ -72,7 +72,7 @@ mod client_server_tests {
     fn request_one() {
         let (client, server) = connected_client_server();
         let handle = thread::spawn(move || server.serve_one());
-        let (response, _body) = client.get("localhost".into(), "/".into()).unwrap();
+        let (response, _body) = client.get("localhost", "/").unwrap();
         handle.join().unwrap().unwrap();
         assert_eq!(response.status(), HttpStatus::OK);
     }
