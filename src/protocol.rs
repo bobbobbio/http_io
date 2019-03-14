@@ -658,6 +658,7 @@ mod http_response_tests {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HttpMethod {
     Get,
+    Put,
 }
 
 impl str::FromStr for HttpMethod {
@@ -665,6 +666,7 @@ impl str::FromStr for HttpMethod {
     fn from_str(s: &str) -> Result<Self> {
         match s.to_uppercase().as_ref() {
             "GET" => Ok(HttpMethod::Get),
+            "PUT" => Ok(HttpMethod::Put),
             m => Err(Error::ParseError(format!("Unknown method {}", m))),
         }
     }
@@ -672,7 +674,10 @@ impl str::FromStr for HttpMethod {
 
 impl fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "GET")
+        match self {
+            HttpMethod::Get => write!(f, "GET"),
+            HttpMethod::Put => write!(f, "PUT"),
+        }
     }
 }
 

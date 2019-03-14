@@ -1,7 +1,6 @@
 use crate::error::{Error, Result};
-use crate::protocol::{self, CrLfStream, HttpHeaders, HttpMethod, HttpRequest, HttpStatus};
-use std::io;
-use std::io::Read;
+use crate::protocol::{self, CrLfStream, HttpHeaders, HttpMethod, HttpStatus};
+use std::io::{self, Read, Write};
 
 pub struct HttpClient<S: io::Read + io::Write> {
     socket: S,
@@ -131,6 +130,48 @@ pub struct HttpResponse<S: io::Read> {
     pub body: HttpBody<S>,
 }
 
+pub struct HttpRequest<S: io::Read + io::Write> {
+    socket: io::BufWriter<S>,
+}
+
+impl<S: io::Read + io::Write> io::Write for HttpRequest<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.socket.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.socket.flush()
+    }
+}
+
+impl<S: io::Read + io::Write> HttpRequest<S> {
+    fn new(socket: io::BufWriter<S>) -> Self {
+        HttpRequest { socket }
+    }
+
+    fn finish(self) -> Result<HttpResponse<S>> {
+        let mut socket = self.socket.into_inner()?;
+        let mut stream = CrLfStream::new(&mut socket);
+        let response = protocol::HttpResponse::deserialize(&mut stream)?;
+        drop(stream);
+
+        let body = io::BufReader::new(socket);
+
+        let encoding = response.get_header("Transfer-Encoding");
+        let content_length = response.get_header("Content-Length").map(str::parse);
+
+        let body = if encoding == Some("chunked") {
+            HttpBody::Chunked(HttpChunkedBody::new(body))
+        } else if let Some(length) = content_length {
+            HttpBody::Limited(body.take(length?))
+        } else {
+            HttpBody::ReadTilClose(body)
+        };
+
+        Ok(HttpResponse::new(response.status, response.headers, body))
+    }
+}
+
 impl<S: io::Read> HttpResponse<S> {
     fn new(status: HttpStatus, headers: HttpHeaders, body: HttpBody<S>) -> Self {
         HttpResponse {
@@ -156,35 +197,27 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         HttpClient { socket }
     }
 
-    pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
-        mut self,
+    pub fn request<S1: AsRef<str>, S2: AsRef<str>>(
+        self,
         host: S1,
+        method: HttpMethod,
         uri: S2,
-    ) -> Result<HttpResponse<S>> {
-        let mut request = HttpRequest::new(HttpMethod::Get, uri.as_ref());
+    ) -> Result<HttpRequest<S>> {
+        let mut socket = io::BufWriter::new(self.socket);
+        let mut request = protocol::HttpRequest::new(method, uri.as_ref());
         request.add_header("Host", host.as_ref());
         request.add_header("User-Agent", "fuck/bitches");
         request.add_header("Accept", "*/*");
-        write!(self.socket, "{}", request)?;
+        write!(&mut socket, "{}", request)?;
+        Ok(HttpRequest::new(socket))
+    }
 
-        let mut stream = CrLfStream::new(&mut self.socket);
-        let response = protocol::HttpResponse::deserialize(&mut stream)?;
-        drop(stream);
+    pub fn get<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<HttpResponse<S>> {
+        Ok(self.request(host, HttpMethod::Get, uri)?.finish()?)
+    }
 
-        let body = io::BufReader::new(self.socket);
-
-        let encoding = response.get_header("Transfer-Encoding");
-        let content_length = response.get_header("Content-Length").map(str::parse);
-
-        let body = if encoding == Some("chunked") {
-            HttpBody::Chunked(HttpChunkedBody::new(body))
-        } else if let Some(length) = content_length {
-            HttpBody::Limited(body.take(length?))
-        } else {
-            HttpBody::ReadTilClose(body)
-        };
-
-        Ok(HttpResponse::new(response.status, response.headers, body))
+    pub fn put<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<HttpRequest<S>> {
+        Ok(self.request(host, HttpMethod::Put, uri)?)
     }
 }
 
@@ -195,6 +228,24 @@ pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
     let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
     let c = HttpClient::new(s);
     let response = c.get(host, uri.as_ref())?;
+
+    if response.status != HttpStatus::OK {
+        return Err(Error::UnexpectedStatus(response.status));
+    }
+
+    Ok(response.body)
+}
+
+pub fn put<S1: AsRef<str>, S2: AsRef<str>, R: io::Read>(
+    host: S1,
+    uri: S2,
+    mut body: R,
+) -> Result<HttpBody<std::net::TcpStream>> {
+    let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
+    let c = HttpClient::new(s);
+    let mut request = c.put(host, uri.as_ref())?;
+    io::copy(&mut body, &mut request)?;
+    let response = request.finish()?;
 
     if response.status != HttpStatus::OK {
         return Err(Error::UnexpectedStatus(response.status));

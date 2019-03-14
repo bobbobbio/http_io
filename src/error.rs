@@ -54,3 +54,12 @@ impl convert::From<num::ParseIntError> for Error {
         Error::ParseIntError(e)
     }
 }
+
+impl<W> convert::From<io::IntoInnerError<W>> for Error {
+    fn from(e: io::IntoInnerError<W>) -> Self {
+        Error::IoError(io::Error::new(
+            io::ErrorKind::Other,
+            format!("{}", e.error()),
+        ))
+    }
+}
