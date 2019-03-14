@@ -499,7 +499,7 @@ mod http_header_tests {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct HttpHeaders {
+pub struct HttpHeaders {
     headers: BTreeMap<String, String>,
 }
 
@@ -592,8 +592,8 @@ mod http_headers_tests {
 #[derive(Debug, PartialEq, Eq)]
 pub struct HttpResponse {
     version: HttpVersion,
-    status: HttpStatus,
-    headers: HttpHeaders,
+    pub status: HttpStatus,
+    pub headers: HttpHeaders,
 }
 
 impl HttpResponse {
@@ -603,10 +603,6 @@ impl HttpResponse {
             status,
             headers: HttpHeaders::new(),
         }
-    }
-
-    pub fn status(&self) -> HttpStatus {
-        self.status
     }
 
     pub fn deserialize<R: io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {

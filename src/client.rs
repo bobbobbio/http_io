@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::protocol::{CrLfStream, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
+use crate::protocol::{self, CrLfStream, HttpHeaders, HttpMethod, HttpRequest, HttpStatus};
 use std::io;
 use std::io::Read;
 
@@ -125,6 +125,22 @@ pub enum HttpBody<S: io::Read> {
     ReadTilClose(HttpReadTilCloseBody<S>),
 }
 
+pub struct HttpResponse<S: io::Read> {
+    pub status: HttpStatus,
+    pub headers: HttpHeaders,
+    pub body: HttpBody<S>,
+}
+
+impl<S: io::Read> HttpResponse<S> {
+    fn new(status: HttpStatus, headers: HttpHeaders, body: HttpBody<S>) -> Self {
+        HttpResponse {
+            status,
+            headers,
+            body,
+        }
+    }
+}
+
 impl<S: io::Read> io::Read for HttpBody<S> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         match self {
@@ -144,7 +160,7 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         mut self,
         host: S1,
         uri: S2,
-    ) -> Result<(HttpResponse, HttpBody<S>)> {
+    ) -> Result<HttpResponse<S>> {
         let mut request = HttpRequest::new(HttpMethod::Get, uri.as_ref());
         request.add_header("Host", host.as_ref());
         request.add_header("User-Agent", "fuck/bitches");
@@ -152,7 +168,7 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         write!(self.socket, "{}", request)?;
 
         let mut stream = CrLfStream::new(&mut self.socket);
-        let response = HttpResponse::deserialize(&mut stream)?;
+        let response = protocol::HttpResponse::deserialize(&mut stream)?;
         drop(stream);
 
         let body = io::BufReader::new(self.socket);
@@ -160,13 +176,15 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         let encoding = response.get_header("Transfer-Encoding");
         let content_length = response.get_header("Content-Length").map(str::parse);
 
-        if encoding == Some("chunked") {
-            Ok((response, HttpBody::Chunked(HttpChunkedBody::new(body))))
+        let body = if encoding == Some("chunked") {
+            HttpBody::Chunked(HttpChunkedBody::new(body))
         } else if let Some(length) = content_length {
-            Ok((response, HttpBody::Limited(body.take(length?))))
+            HttpBody::Limited(body.take(length?))
         } else {
-            Ok((response, HttpBody::ReadTilClose(body)))
-        }
+            HttpBody::ReadTilClose(body)
+        };
+
+        Ok(HttpResponse::new(response.status, response.headers, body))
     }
 }
 
@@ -176,11 +194,11 @@ pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
 ) -> Result<HttpBody<std::net::TcpStream>> {
     let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
     let c = HttpClient::new(s);
-    let (response, body_stream) = c.get(host, uri.as_ref())?;
+    let response = c.get(host, uri.as_ref())?;
 
-    if response.status() != HttpStatus::OK {
-        return Err(Error::UnexpectedStatus(response.status()));
+    if response.status != HttpStatus::OK {
+        return Err(Error::UnexpectedStatus(response.status));
     }
 
-    Ok(body_stream)
+    Ok(response.body)
 }

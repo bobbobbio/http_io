@@ -11,12 +11,12 @@ fn client_main(mut args: std::env::Args) -> Result<()> {
 
     let s = net::TcpStream::connect((host.as_ref(), 80))?;
     let h = HttpClient::new(s);
-    let (response, mut body_stream) = h.get(host, "/")?;
+    let mut response = h.get(host, "/")?;
 
     let mut body = Vec::new();
-    body_stream.read_to_end(&mut body)?;
+    response.body.read_to_end(&mut body)?;
 
-    println!("{:#?}", response);
+    println!("{:#?}", response.headers);
     io::stdout().write(&body)?;
     Ok(())
 }
