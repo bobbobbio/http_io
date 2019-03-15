@@ -3,8 +3,149 @@ use std::cmp;
 use std::collections::BTreeMap;
 use std::convert;
 use std::fmt;
-use std::io;
+use std::io::{self, Read};
 use std::str;
+
+struct HttpBodyChunk<S: io::Read> {
+    inner: io::Take<HttpReadTilCloseBody<S>>,
+}
+
+pub struct HttpChunkedBody<S: io::Read> {
+    stream: Option<HttpReadTilCloseBody<S>>,
+    chunk: Option<HttpBodyChunk<S>>,
+}
+
+impl<S: io::Read> HttpChunkedBody<S> {
+    fn new(stream: HttpReadTilCloseBody<S>) -> Self {
+        HttpChunkedBody {
+            stream: Some(stream),
+            chunk: None,
+        }
+    }
+}
+
+impl<S: io::Read> HttpBodyChunk<S> {
+    fn new(mut stream: HttpReadTilCloseBody<S>) -> Result<Option<Self>> {
+        let mut ts = CrLfStream::new(&mut stream);
+        let size_str = ts.expect_next()?;
+        drop(ts);
+        let size = u64::from_str_radix(&size_str, 16)?;
+        Ok(if size == 0 {
+            None
+        } else {
+            Some(HttpBodyChunk {
+                inner: stream.take(size),
+            })
+        })
+    }
+
+    fn into_inner(self) -> HttpReadTilCloseBody<S> {
+        self.inner.into_inner()
+    }
+}
+
+impl<S: io::Read> io::Read for HttpBodyChunk<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buffer)
+    }
+}
+
+impl<S: io::Read> io::Read for HttpChunkedBody<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if let Some(mut chunk) = self.chunk.take() {
+            let read = chunk.read(buffer)?;
+            if read == 0 {
+                let mut stream = chunk.into_inner();
+                let mut b = [0; 2];
+                stream.read(&mut b)?;
+                self.stream = Some(stream);
+                self.read(buffer)
+            } else {
+                self.chunk.replace(chunk);
+                Ok(read)
+            }
+        } else if let Some(stream) = self.stream.take() {
+            let new_chunk = HttpBodyChunk::new(stream)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            match new_chunk {
+                Some(chunk) => {
+                    self.chunk = Some(chunk);
+                    self.read(buffer)
+                }
+                None => Ok(0),
+            }
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+#[cfg(test)]
+mod chunked_encoding_tests {
+    use super::HttpChunkedBody;
+    use crate::error::Result;
+    use std::io;
+    use std::io::Read;
+
+    fn chunk_test(i: &'static str) -> Result<String> {
+        let input = io::BufReader::new(io::Cursor::new(i));
+        let mut body = HttpChunkedBody::new(input);
+
+        let mut output = String::new();
+        body.read_to_string(&mut output)?;
+        Ok(output)
+    }
+
+    #[test]
+    fn simple_chunk() {
+        assert_eq!(
+            &chunk_test("a\r\n0123456789\r\n0\r\n").unwrap(),
+            "0123456789"
+        );
+    }
+
+    #[test]
+    fn chunk_missing_last_chunk() {
+        assert!(chunk_test("a\r\n0123456789\r\n").is_err());
+    }
+
+    #[test]
+    fn chunk_short_read() {
+        assert!(chunk_test("a\r\n012345678").is_err());
+    }
+}
+
+type HttpReadTilCloseBody<S> = io::BufReader<S>;
+type HttpLimitedBody<S> = io::Take<HttpReadTilCloseBody<S>>;
+
+pub enum HttpBody<S: io::Read> {
+    Chunked(HttpChunkedBody<S>),
+    Limited(HttpLimitedBody<S>),
+    ReadTilClose(HttpReadTilCloseBody<S>),
+}
+
+impl<S: io::Read> io::Read for HttpBody<S> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self {
+            HttpBody::Chunked(i) => i.read(buffer),
+            HttpBody::Limited(i) => i.read(buffer),
+            HttpBody::ReadTilClose(i) => i.read(buffer),
+        }
+    }
+}
+
+impl<S: io::Read> HttpBody<S> {
+    pub fn new(encoding: Option<&str>, content_length: Option<u64>, socket: S) -> Self {
+        let body = io::BufReader::new(socket);
+        if encoding == Some("chunked") {
+            HttpBody::Chunked(HttpChunkedBody::new(body))
+        } else if let Some(length) = content_length {
+            HttpBody::Limited(body.take(length))
+        } else {
+            HttpBody::ReadTilClose(body)
+        }
+    }
+}
 
 pub struct CrLfStream<W> {
     stream: io::Bytes<W>,
@@ -589,35 +730,45 @@ mod http_headers_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct HttpResponse {
+pub struct HttpResponse<B: io::Read> {
     version: HttpVersion,
     pub status: HttpStatus,
     pub headers: HttpHeaders,
+    pub body: HttpBody<B>,
 }
 
-impl HttpResponse {
-    pub fn new(status: HttpStatus) -> Self {
+impl<B: io::Read> HttpResponse<B> {
+    pub fn new(status: HttpStatus, body: B) -> Self {
+        let body = HttpBody::ReadTilClose(io::BufReader::new(body));
         HttpResponse {
             version: HttpVersion::new(1, 1),
             status,
             headers: HttpHeaders::new(),
+            body,
         }
     }
 
-    pub fn deserialize<R: io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {
+    pub fn deserialize(mut socket: B) -> Result<Self> {
+        let mut s = CrLfStream::new(&mut socket);
         let first_line = s.expect_next()?;
         let mut parser = Parser::new(&first_line);
 
         let version = parser.parse_token()?.parse()?;
         let status = parser.parse_remaining()?.parse()?;
 
-        let headers = HttpHeaders::deserialize(s)?;
+        let headers = HttpHeaders::deserialize(&mut s)?;
+        drop(s);
+
+        let encoding = headers.get("Transfer-Encoding");
+        let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
+
+        let body = HttpBody::new(encoding, content_length, socket);
 
         Ok(HttpResponse {
             version,
             status,
             headers,
+            body,
         })
     }
 
@@ -631,7 +782,7 @@ impl HttpResponse {
     }
 }
 
-impl fmt::Display for HttpResponse {
+impl<B: io::Read> fmt::Display for HttpResponse<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {}\r\n", self.version, self.status)?;
         write!(f, "{}", self.headers)?;
@@ -642,16 +793,19 @@ impl fmt::Display for HttpResponse {
 
 #[cfg(test)]
 mod http_response_tests {
-    use super::{CrLfStream, HttpResponse, HttpStatus};
+    use super::{HttpResponse, HttpStatus};
+    use std::io;
 
     #[test]
     fn parse_success() {
-        let mut input = CrLfStream::new("HTTP/1.1 200 OK\r\nA: B\r\nC: D\r\n\r\n".as_bytes());
-        let actual = HttpResponse::deserialize(&mut input).unwrap();
-        let mut expected = HttpResponse::new(HttpStatus::OK);
+        let input = "HTTP/1.1 200 OK\r\nA: B\r\nC: D\r\n\r\n".as_bytes();
+        let actual = HttpResponse::deserialize(input).unwrap();
+        let mut expected = HttpResponse::new(HttpStatus::OK, io::empty());
         expected.add_header("A", "B");
         expected.add_header("C", "D");
-        assert_eq!(actual, expected);
+        assert_eq!(actual.version, expected.version);
+        assert_eq!(actual.status, expected.status);
+        assert_eq!(actual.headers, expected.headers);
     }
 }
 
@@ -710,10 +864,10 @@ mod http_method_tests {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct HttpRequest {
-    method: HttpMethod,
-    uri: String,
+    pub method: HttpMethod,
+    pub uri: String,
     version: HttpVersion,
-    headers: HttpHeaders,
+    pub headers: HttpHeaders,
 }
 
 impl fmt::Display for HttpRequest {

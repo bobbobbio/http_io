@@ -1,7 +1,6 @@
 use crate::error::Result;
-use crate::protocol::{CrLfStream, HttpRequest, HttpResponse, HttpStatus};
-use std::io;
-use std::io::Write;
+use crate::protocol::{CrLfStream, HttpBody, HttpMethod, HttpRequest, HttpResponse};
+use std::io::{self, Write};
 use std::net;
 
 pub trait Listen {
@@ -17,24 +16,42 @@ impl Listen for net::TcpListener {
     }
 }
 
-pub struct HttpServer<L: Listen> {
-    connection_stream: L,
+pub trait HttpRequestHandler<I: io::Read> {
+    fn get(&self, uri: &str, stream: HttpBody<&mut I>) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn put(&self, uri: &str, stream: HttpBody<&mut I>) -> Result<HttpResponse<Box<dyn io::Read>>>;
 }
 
-impl<L: Listen> HttpServer<L> {
-    pub fn new(connection_stream: L) -> Self {
-        HttpServer { connection_stream }
+pub struct HttpServer<L: Listen, H: HttpRequestHandler<L::stream>> {
+    connection_stream: L,
+    request_handler: H,
+}
+
+impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
+    pub fn new(connection_stream: L, request_handler: H) -> Self {
+        HttpServer {
+            connection_stream,
+            request_handler,
+        }
     }
 
     fn serve_one(&self) -> Result<()> {
         let mut stream = io::BufReader::new(self.connection_stream.accept()?);
         let mut ts = CrLfStream::new(&mut stream);
         let request = HttpRequest::deserialize(&mut ts)?;
+        drop(ts);
+
+        let headers = &request.headers;
+        let encoding = headers.get("Transfer-Encoding");
+        let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
 
         let mut stream = stream.into_inner();
-        let response = HttpResponse::new(HttpStatus::OK);
-        write!(stream, "{}{:#?}", response, request)?;
-        println!("Served one request");
+        let body = HttpBody::new(encoding, content_length, &mut stream);
+        let mut response = match request.method {
+            HttpMethod::Get => self.request_handler.get(&request.uri, body)?,
+            HttpMethod::Put => self.request_handler.put(&request.uri, body)?,
+        };
+        write!(stream, "{}", response)?;
+        io::copy(&mut response.body, &mut stream)?;
 
         Ok(())
     }
@@ -51,16 +68,45 @@ impl<L: Listen> HttpServer<L> {
 
 #[cfg(test)]
 mod client_server_tests {
-    use super::HttpServer;
+    use super::{HttpRequestHandler, HttpServer};
     use crate::client::HttpClient;
-    use crate::protocol::HttpStatus;
-    use std::net;
-    use std::thread;
+    use crate::error::Result;
+    use crate::protocol::{HttpBody, HttpResponse, HttpStatus};
+    use std::{io, net, thread};
 
-    fn connected_client_server() -> (HttpClient<net::TcpStream>, HttpServer<net::TcpListener>) {
+    struct TestRequestHandler();
+
+    impl TestRequestHandler {
+        fn new() -> Self {
+            TestRequestHandler()
+        }
+    }
+
+    impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
+        fn get(
+            &self,
+            _uri: &str,
+            _stream: HttpBody<&mut I>,
+        ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+            Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
+        }
+        fn put(
+            &self,
+            _uri: &str,
+            _stream: HttpBody<&mut I>,
+        ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+            Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
+        }
+    }
+
+    fn connected_client_server() -> (
+        HttpClient<net::TcpStream>,
+        HttpServer<net::TcpListener, TestRequestHandler>,
+    ) {
         let server_socket = net::TcpListener::bind("localhost:0").unwrap();
         let server_address = server_socket.local_addr().unwrap();
-        let server = HttpServer::new(server_socket);
+        let handler = TestRequestHandler::new();
+        let server = HttpServer::new(server_socket, handler);
 
         let client_socket = net::TcpStream::connect(server_address).unwrap();
         let client = HttpClient::new(client_socket);
