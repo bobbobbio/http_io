@@ -1,32 +1,38 @@
 use crate::error::{Error, Result};
-use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus, OutgoingBody};
+use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpStatus, OutgoingBody};
 use std::io;
 
-pub struct HttpClient<S: io::Read + io::Write> {
+pub struct HttpRequestBuilder<S: io::Read + io::Write> {
+    request: HttpRequest<io::Empty>,
     socket: S,
 }
 
-impl<S: io::Read + io::Write> HttpClient<S> {
-    pub fn new(socket: S) -> HttpClient<S> {
-        HttpClient { socket }
+impl<S: io::Read + io::Write> HttpRequestBuilder<S> {
+    pub fn new(socket: S) -> HttpRequestBuilder<S> {
+        let mut request = HttpRequest::new(HttpMethod::Get, "/");
+        request.add_header("User-Agent", "http_io");
+        request.add_header("Accept", "*/*");
+        HttpRequestBuilder { request, socket }
     }
 
     pub fn request<S1: AsRef<str>, S2: AsRef<str>>(
-        self,
+        mut self,
         host: S1,
         method: HttpMethod,
         uri: S2,
     ) -> Result<OutgoingBody<S>> {
-        let socket = io::BufWriter::new(self.socket);
-        let mut request = HttpRequest::new(method, uri.as_ref());
-        request.add_header("Host", host.as_ref());
-        request.add_header("User-Agent", "fuck/bitches");
-        request.add_header("Accept", "*/*");
-        request.serialize(socket)
+        self.request.method = method;
+        self.request.uri = uri.as_ref().into();
+        self.request.add_header("Host", host.as_ref());
+        self.request.serialize(io::BufWriter::new(self.socket))
     }
 
-    pub fn get<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<HttpResponse<S>> {
-        Ok(self.request(host, HttpMethod::Get, uri)?.finish()?)
+    pub fn add_header<S1: AsRef<str>, S2: AsRef<str>>(&mut self, key: S1, value: S2) {
+        self.request.add_header(key.as_ref(), value.as_ref());
+    }
+
+    pub fn get<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<OutgoingBody<S>> {
+        Ok(self.request(host, HttpMethod::Get, uri)?)
     }
 
     pub fn put<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<OutgoingBody<S>> {
@@ -39,8 +45,8 @@ pub fn get<S1: AsRef<str>, S2: AsRef<str>>(
     uri: S2,
 ) -> Result<HttpBody<std::net::TcpStream>> {
     let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
-    let c = HttpClient::new(s);
-    let response = c.get(host, uri.as_ref())?;
+    let c = HttpRequestBuilder::new(s);
+    let response = c.get(host, uri.as_ref())?.finish()?;
 
     if response.status != HttpStatus::OK {
         return Err(Error::UnexpectedStatus(response.status));
@@ -55,7 +61,7 @@ pub fn put<S1: AsRef<str>, S2: AsRef<str>, R: io::Read>(
     mut body: R,
 ) -> Result<HttpBody<std::net::TcpStream>> {
     let s = std::net::TcpStream::connect((host.as_ref(), 80))?;
-    let c = HttpClient::new(s);
+    let c = HttpRequestBuilder::new(s);
     let mut request = c.put(host, uri.as_ref())?;
     io::copy(&mut body, &mut request)?;
     let response = request.finish()?;

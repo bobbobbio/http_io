@@ -64,7 +64,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
 #[cfg(test)]
 mod client_server_tests {
     use super::{HttpRequestHandler, HttpServer};
-    use crate::client::HttpClient;
+    use crate::client::HttpRequestBuilder;
     use crate::error::Result;
     use crate::protocol::{HttpBody, HttpResponse, HttpStatus};
     use std::{io, net, thread};
@@ -95,7 +95,7 @@ mod client_server_tests {
     }
 
     fn connected_client_server() -> (
-        HttpClient<net::TcpStream>,
+        HttpRequestBuilder<net::TcpStream>,
         HttpServer<net::TcpListener, TestRequestHandler>,
     ) {
         let server_socket = net::TcpListener::bind("localhost:0").unwrap();
@@ -104,7 +104,7 @@ mod client_server_tests {
         let server = HttpServer::new(server_socket, handler);
 
         let client_socket = net::TcpStream::connect(server_address).unwrap();
-        let client = HttpClient::new(client_socket);
+        let client = HttpRequestBuilder::new(client_socket);
 
         (client, server)
     }
@@ -113,7 +113,7 @@ mod client_server_tests {
     fn request_one() {
         let (client, server) = connected_client_server();
         let handle = thread::spawn(move || server.serve_one());
-        let response = client.get("localhost", "/").unwrap();
+        let response = client.get("localhost", "/").unwrap().finish().unwrap();
         handle.join().unwrap().unwrap();
         assert_eq!(response.status, HttpStatus::OK);
     }

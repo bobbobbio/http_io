@@ -1,7 +1,7 @@
-use std::io::{self, Read, Write};
+use std::io;
 use std::net;
 
-use http_io::client::HttpClient;
+use http_io::client::HttpRequestBuilder;
 use http_io::error::Result;
 
 fn main() -> Result<()> {
@@ -9,13 +9,9 @@ fn main() -> Result<()> {
     let host = args.next().unwrap_or("www.google.com".into());
 
     let s = net::TcpStream::connect((host.as_ref(), 80))?;
-    let h = HttpClient::new(s);
-    let mut response = h.get(host, "/")?;
-
-    let mut body = Vec::new();
-    response.body.read_to_end(&mut body)?;
+    let mut response = HttpRequestBuilder::new(s).get(host, "/")?.finish()?;
 
     println!("{:#?}", response.headers);
-    io::stdout().write(&body)?;
+    io::copy(&mut response.body, &mut io::stdout())?;
     Ok(())
 }
