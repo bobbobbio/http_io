@@ -602,12 +602,8 @@ impl HttpHeader {
             value: value.into(),
         }
     }
-}
 
-impl str::FromStr for HttpHeader {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
+    fn deserialize(s: &str) -> Result<Self> {
         let mut parser = Parser::new(s);
         let key = parser.parse_until(":")?;
         parser.expect(": ")?;
@@ -624,18 +620,18 @@ mod http_header_tests {
     #[test]
     fn parse_success() {
         assert_eq!(
-            "key: value".parse::<HttpHeader>().unwrap(),
+            HttpHeader::deserialize("key: value").unwrap(),
             HttpHeader::new("key", "value")
         );
         assert_eq!(
-            "key: value1 value2".parse::<HttpHeader>().unwrap(),
+            HttpHeader::deserialize("key: value1 value2").unwrap(),
             HttpHeader::new("key", "value1 value2")
         );
     }
 
     #[test]
     fn parse_failure_no_value() {
-        assert!("key".parse::<HttpHeader>().is_err());
+        assert!(HttpHeader::deserialize("key").is_err());
     }
 }
 
@@ -670,9 +666,16 @@ impl HttpHeaders {
                 }
                 line.push_str(&iter.next().unwrap()?);
             }
-            headers.push(line.parse()?);
+            headers.push(HttpHeader::deserialize(&line)?);
         }
         Ok(HttpHeaders::from(headers))
+    }
+
+    fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+        for (key, value) in &self.headers {
+            write!(&mut w, "{}: {}\r\n", key, value)?;
+        }
+        Ok(())
     }
 }
 
@@ -686,29 +689,25 @@ impl From<Vec<HttpHeader>> for HttpHeaders {
     }
 }
 
-impl fmt::Display for HttpHeaders {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (key, value) in &self.headers {
-            write!(f, "{}: {}\r\n", key, value)?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod http_headers_tests {
     use super::{CrLfStream, HttpHeader, HttpHeaders};
+    use std::str;
 
     #[test]
     fn to_string() {
         let headers = HttpHeaders::from(vec![HttpHeader::new("a", "b"), HttpHeader::new("c", "d")]);
-        assert_eq!(&headers.to_string(), "a: b\r\nc: d\r\n");
+        let mut data = Vec::new();
+        headers.serialize(&mut data).unwrap();
+        assert_eq!(str::from_utf8(&data).unwrap(), "a: b\r\nc: d\r\n");
     }
 
     #[test]
-    fn to_string_empty() {
+    fn serialize_empty() {
         let headers = HttpHeaders::from(vec![]);
-        assert_eq!(&headers.to_string(), "");
+        let mut data = Vec::new();
+        headers.serialize(&mut data).unwrap();
+        assert_eq!(str::from_utf8(&data).unwrap(), "");
     }
 
     #[test]
@@ -780,13 +779,11 @@ impl<B: io::Read> HttpResponse<B> {
     pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
         self.headers.insert(key, value);
     }
-}
 
-impl<B: io::Read> fmt::Display for HttpResponse<B> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}\r\n", self.version, self.status)?;
-        write!(f, "{}", self.headers)?;
-        write!(f, "\r\n")?;
+    pub fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+        write!(&mut w, "{} {}\r\n", self.version, self.status)?;
+        self.headers.serialize(&mut w)?;
+        write!(&mut w, "\r\n")?;
         Ok(())
     }
 }
@@ -870,15 +867,6 @@ pub struct HttpRequest {
     pub headers: HttpHeaders,
 }
 
-impl fmt::Display for HttpRequest {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} {}\r\n", self.method, self.uri, self.version)?;
-        write!(f, "{}", self.headers)?;
-        write!(f, "\r\n")?;
-        Ok(())
-    }
-}
-
 impl HttpRequest {
     pub fn new<S: Into<String>>(method: HttpMethod, uri: S) -> Self {
         HttpRequest {
@@ -908,6 +896,13 @@ impl HttpRequest {
             version,
             headers,
         })
+    }
+
+    pub fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+        write!(&mut w, "{} {} {}\r\n", self.method, self.uri, self.version)?;
+        self.headers.serialize(&mut w)?;
+        write!(&mut w, "\r\n")?;
+        Ok(())
     }
 }
 

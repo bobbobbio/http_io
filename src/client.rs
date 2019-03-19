@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
-use std::io::{self, Write};
+use std::io;
 
 pub struct HttpClient<S: io::Read + io::Write> {
     socket: S,
@@ -47,7 +47,7 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         request.add_header("Host", host.as_ref());
         request.add_header("User-Agent", "fuck/bitches");
         request.add_header("Accept", "*/*");
-        write!(&mut socket, "{}", request)?;
+        request.serialize(&mut socket)?;
         Ok(OutgoingBody::new(socket))
     }
 

@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::protocol::{CrLfStream, HttpBody, HttpMethod, HttpRequest, HttpResponse};
-use std::io::{self, Write};
+use std::io;
 use std::net;
 
 pub trait Listen {
@@ -50,7 +50,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
             HttpMethod::Get => self.request_handler.get(&request.uri, body)?,
             HttpMethod::Put => self.request_handler.put(&request.uri, body)?,
         };
-        write!(stream, "{}", response)?;
+        response.serialize(&mut stream)?;
         io::copy(&mut response.body, &mut stream)?;
 
         Ok(())
