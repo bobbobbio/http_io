@@ -19,7 +19,11 @@ impl FileHandler {
 }
 
 impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
-    fn get(&self, uri: &str, _stream: HttpBody<&mut I>) -> Result<HttpResponse<Box<dyn io::Read>>> {
+    fn get(
+        &self,
+        uri: String,
+        _stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>> {
         let path = self.file_root.join(uri.trim_start_matches("/"));
         println!("Request for {:?}", path);
         if std::fs::metadata(&path)?.is_dir() {
@@ -61,7 +65,7 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
 
     fn put(
         &self,
-        uri: &str,
+        uri: String,
         mut stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
         let path = self.file_root.join(uri.trim_start_matches("/"));

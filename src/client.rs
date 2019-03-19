@@ -1,34 +1,9 @@
 use crate::error::{Error, Result};
-use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
+use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus, OutgoingBody};
 use std::io;
 
 pub struct HttpClient<S: io::Read + io::Write> {
     socket: S,
-}
-
-pub struct OutgoingBody<S: io::Read + io::Write> {
-    socket: io::BufWriter<S>,
-}
-
-impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.socket.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.socket.flush()
-    }
-}
-
-impl<S: io::Read + io::Write> OutgoingBody<S> {
-    fn new(socket: io::BufWriter<S>) -> Self {
-        OutgoingBody { socket }
-    }
-
-    fn finish(self) -> Result<HttpResponse<S>> {
-        let socket = self.socket.into_inner()?;
-        Ok(HttpResponse::deserialize(socket)?)
-    }
 }
 
 impl<S: io::Read + io::Write> HttpClient<S> {
@@ -42,13 +17,12 @@ impl<S: io::Read + io::Write> HttpClient<S> {
         method: HttpMethod,
         uri: S2,
     ) -> Result<OutgoingBody<S>> {
-        let mut socket = io::BufWriter::new(self.socket);
+        let socket = io::BufWriter::new(self.socket);
         let mut request = HttpRequest::new(method, uri.as_ref());
         request.add_header("Host", host.as_ref());
         request.add_header("User-Agent", "fuck/bitches");
         request.add_header("Accept", "*/*");
-        request.serialize(&mut socket)?;
-        Ok(OutgoingBody::new(socket))
+        request.serialize(socket)
     }
 
     pub fn get<S1: AsRef<str>, S2: AsRef<str>>(self, host: S1, uri: S2) -> Result<HttpResponse<S>> {

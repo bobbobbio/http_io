@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::protocol::{CrLfStream, HttpBody, HttpMethod, HttpRequest, HttpResponse};
+use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
 use std::io;
 use std::net;
 
@@ -17,8 +17,10 @@ impl Listen for net::TcpListener {
 }
 
 pub trait HttpRequestHandler<I: io::Read> {
-    fn get(&self, uri: &str, stream: HttpBody<&mut I>) -> Result<HttpResponse<Box<dyn io::Read>>>;
-    fn put(&self, uri: &str, stream: HttpBody<&mut I>) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn get(&self, uri: String, stream: HttpBody<&mut I>)
+        -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn put(&self, uri: String, stream: HttpBody<&mut I>)
+        -> Result<HttpResponse<Box<dyn io::Read>>>;
 }
 
 pub struct HttpServer<L: Listen, H: HttpRequestHandler<L::stream>> {
@@ -35,21 +37,14 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     }
 
     fn serve_one(&self) -> Result<()> {
-        let mut stream = io::BufReader::new(self.connection_stream.accept()?);
-        let mut ts = CrLfStream::new(&mut stream);
-        let request = HttpRequest::deserialize(&mut ts)?;
-        drop(ts);
+        let mut stream = self.connection_stream.accept()?;
+        let request = HttpRequest::deserialize(io::BufReader::new(&mut stream))?;
 
-        let headers = &request.headers;
-        let encoding = headers.get("Transfer-Encoding");
-        let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
-
-        let mut stream = stream.into_inner();
-        let body = HttpBody::new(encoding, content_length, &mut stream);
         let mut response = match request.method {
-            HttpMethod::Get => self.request_handler.get(&request.uri, body)?,
-            HttpMethod::Put => self.request_handler.put(&request.uri, body)?,
+            HttpMethod::Get => self.request_handler.get(request.uri, request.body)?,
+            HttpMethod::Put => self.request_handler.put(request.uri, request.body)?,
         };
+
         response.serialize(&mut stream)?;
         io::copy(&mut response.body, &mut stream)?;
 
@@ -85,14 +80,14 @@ mod client_server_tests {
     impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         fn get(
             &self,
-            _uri: &str,
+            _uri: String,
             _stream: HttpBody<&mut I>,
         ) -> Result<HttpResponse<Box<dyn io::Read>>> {
             Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
         }
         fn put(
             &self,
-            _uri: &str,
+            _uri: String,
             _stream: HttpBody<&mut I>,
         ) -> Result<HttpResponse<Box<dyn io::Read>>> {
             Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))

@@ -3,7 +3,7 @@ use std::cmp;
 use std::collections::BTreeMap;
 use std::convert;
 use std::fmt;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::str;
 
 struct HttpBodyChunk<S: io::Read> {
@@ -859,64 +859,107 @@ mod http_method_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct HttpRequest {
+pub struct HttpRequest<B: io::Read> {
     pub method: HttpMethod,
     pub uri: String,
     version: HttpVersion,
     pub headers: HttpHeaders,
+    pub body: HttpBody<B>,
 }
 
-impl HttpRequest {
+impl HttpRequest<io::Empty> {
     pub fn new<S: Into<String>>(method: HttpMethod, uri: S) -> Self {
         HttpRequest {
             method,
             uri: uri.into(),
             version: HttpVersion::new(1, 1),
             headers: HttpHeaders::new(),
+            body: HttpBody::ReadTilClose(io::BufReader::new(io::empty())),
         }
     }
+}
 
+pub struct OutgoingBody<S: io::Read + io::Write> {
+    socket: io::BufWriter<S>,
+}
+
+impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.socket.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.socket.flush()
+    }
+}
+
+impl<S: io::Read + io::Write> OutgoingBody<S> {
+    fn new(socket: io::BufWriter<S>) -> Self {
+        OutgoingBody { socket }
+    }
+
+    pub fn finish(self) -> Result<HttpResponse<S>> {
+        let socket = self.socket.into_inner()?;
+        Ok(HttpResponse::deserialize(socket)?)
+    }
+}
+
+impl<B: io::Read> HttpRequest<B> {
     pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
         self.headers.insert(key, value);
     }
 
-    pub fn deserialize<R: io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {
-        let first_line = s.expect_next()?;
+    pub fn deserialize(mut stream: io::BufReader<B>) -> Result<Self> {
+        let mut ts = CrLfStream::new(&mut stream);
+        let first_line = ts.expect_next()?;
         let mut parser = Parser::new(&first_line);
 
         let method = parser.parse_token()?.parse()?;
         let uri = parser.parse_token()?.into();
         let version = parser.parse_token()?.parse()?;
-        let headers = HttpHeaders::deserialize(s)?;
+        let headers = HttpHeaders::deserialize(&mut ts)?;
+        drop(ts);
+
+        let encoding = headers.get("Transfer-Encoding");
+        let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
+        let body = HttpBody::new(encoding, content_length, stream.into_inner());
 
         Ok(HttpRequest {
             method,
             uri,
             version,
             headers,
+            body,
         })
     }
+}
 
-    pub fn serialize<W: io::Write>(&self, mut w: W) -> Result<()> {
+impl<B: io::Read> HttpRequest<B> {
+    pub fn serialize<S: io::Read + io::Write>(
+        &self,
+        mut w: io::BufWriter<S>,
+    ) -> Result<OutgoingBody<S>> {
         write!(&mut w, "{} {} {}\r\n", self.method, self.uri, self.version)?;
         self.headers.serialize(&mut w)?;
         write!(&mut w, "\r\n")?;
-        Ok(())
+        Ok(OutgoingBody::new(w))
     }
 }
 
 #[cfg(test)]
 mod http_request_tests {
-    use super::{CrLfStream, HttpMethod, HttpRequest};
+    use super::{HttpMethod, HttpRequest};
+    use std::io;
 
     #[test]
     fn parse_success() {
-        let mut input = CrLfStream::new("GET /a/b HTTP/1.1\r\nA: B\r\nC: D\r\n\r\n".as_bytes());
-        let actual = HttpRequest::deserialize(&mut input).unwrap();
+        let mut input = "GET /a/b HTTP/1.1\r\nA: B\r\nC: D\r\n\r\n".as_bytes();
+        let actual = HttpRequest::deserialize(io::BufReader::new(&mut input)).unwrap();
         let mut expected = HttpRequest::new(HttpMethod::Get, "/a/b");
         expected.add_header("A", "B");
         expected.add_header("C", "D");
-        assert_eq!(actual, expected);
+        assert_eq!(actual.version, expected.version);
+        assert_eq!(actual.method, expected.method);
+        assert_eq!(actual.headers, expected.headers);
     }
 }
