@@ -48,14 +48,30 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
         let path = self.file_root.join(uri.trim_start_matches("/"));
         println!("Request for {:?}", path);
         if std::fs::metadata(&path)?.is_dir() {
-            let mut page = String::new();
+            let mut file_list = String::new();
             for entry in std::fs::read_dir(&path)? {
                 let entry = entry?;
                 if let Some(name) = entry.file_name().to_str() {
                     let link = name.to_owned() + if entry.metadata()?.is_dir() { "/" } else { "" };
-                    page += &format!("<a href=\"{}\">{}</a></br>", link, name,);
+                    file_list += &format!("<li><a href=\"{}\">{}</a></br>", link, name,);
                 }
             }
+            let page = format!(
+                r#"
+                <html>
+                <title>Directory listing for {0}</title>
+                <h2>Directory listing for {0}</h2>
+                <body>
+                <hr>
+                <ul>
+                {1}
+                </ul>
+                <hr>
+                </body>
+                </html>
+            "#,
+                uri, &file_list
+            );
             Ok(HttpResponse::new(
                 HttpStatus::OK,
                 Box::new(io::Cursor::new(page)),
