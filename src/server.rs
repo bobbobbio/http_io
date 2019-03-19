@@ -95,7 +95,7 @@ mod client_server_tests {
     }
 
     fn connected_client_server() -> (
-        HttpRequestBuilder<net::TcpStream>,
+        net::TcpStream,
         HttpServer<net::TcpListener, TestRequestHandler>,
     ) {
         let server_socket = net::TcpListener::bind("localhost:0").unwrap();
@@ -104,16 +104,19 @@ mod client_server_tests {
         let server = HttpServer::new(server_socket, handler);
 
         let client_socket = net::TcpStream::connect(server_address).unwrap();
-        let client = HttpRequestBuilder::new(client_socket);
 
-        (client, server)
+        (client_socket, server)
     }
 
     #[test]
     fn request_one() {
-        let (client, server) = connected_client_server();
+        let (client_socket, server) = connected_client_server();
         let handle = thread::spawn(move || server.serve_one());
-        let response = client.get("localhost", "/").unwrap().finish().unwrap();
+        let response = HttpRequestBuilder::get("localhost", "/")
+            .send(client_socket)
+            .unwrap()
+            .finish()
+            .unwrap();
         handle.join().unwrap().unwrap();
         assert_eq!(response.status, HttpStatus::OK);
     }

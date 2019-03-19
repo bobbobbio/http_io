@@ -9,7 +9,7 @@ fn main() -> Result<()> {
     let host = args.next().unwrap_or("www.google.com".into());
 
     let s = net::TcpStream::connect((host.as_ref(), 80))?;
-    let mut response = HttpRequestBuilder::new(s).get(host, "/")?.finish()?;
+    let mut response = HttpRequestBuilder::get(host, "/").send(s)?.finish()?;
 
     println!("{:#?}", response.headers);
     io::copy(&mut response.body, &mut io::stdout())?;
