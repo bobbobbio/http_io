@@ -235,17 +235,17 @@ mod cr_lf_tests {
     }
 }
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     s: &'a str,
     position: usize,
 }
 
 impl<'a> Parser<'a> {
-    fn new(s: &'a str) -> Self {
+    pub fn new(s: &'a str) -> Self {
         Parser { s, position: 0 }
     }
 
-    fn expect(&mut self, expected: &str) -> Result<()> {
+    pub fn expect(&mut self, expected: &str) -> Result<()> {
         if self.position >= self.s.len() {
             return Err(Error::UnexpectedEof(format!("Expected {}", expected)));
         }
@@ -263,7 +263,20 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_digit(&mut self) -> Result<u32> {
+    pub fn parse_char(&mut self) -> Result<char> {
+        if self.position >= self.s.len() {
+            return Err(Error::UnexpectedEof(format!("Expected char")));
+        }
+
+        let c = self.s[self.position..(self.position + 1)]
+            .chars()
+            .next()
+            .unwrap();
+        self.position += 1;
+        Ok(c)
+    }
+
+    pub fn parse_digit(&mut self) -> Result<u32> {
         if self.position >= self.s.len() {
             return Err(Error::UnexpectedEof(format!("Expected digit")));
         }
@@ -273,7 +286,7 @@ impl<'a> Parser<'a> {
         Ok(digit.parse()?)
     }
 
-    fn parse_until(&mut self, div: &str) -> Result<&'a str> {
+    pub fn parse_until(&mut self, div: &str) -> Result<&'a str> {
         if self.position >= self.s.len() {
             return Err(Error::UnexpectedEof(format!("Expected '{}'", div)));
         }
@@ -287,7 +300,23 @@ impl<'a> Parser<'a> {
         Ok(&remaining[..pos])
     }
 
-    fn consume_whilespace(&mut self) {
+    pub fn parse_until_any(&mut self, divs: &[char]) -> Result<&'a str> {
+        if self.position >= self.s.len() {
+            return Err(Error::UnexpectedEof(format!("Expected '{:?}'", divs)));
+        }
+
+        let remaining = &self.s[self.position..];
+        let pos = remaining
+            .find(|c| divs.contains(&c))
+            .ok_or(Error::ParseError(format!(
+                "Expected '{:?}' in '{}'",
+                divs, remaining
+            )))?;
+        self.position += pos;
+        Ok(&remaining[..pos])
+    }
+
+    pub fn consume_whilespace(&mut self) {
         while self.position < self.s.len()
             && (self.s[self.position..].starts_with(" ")
                 || self.s[self.position..].starts_with("\t"))
@@ -296,7 +325,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_token(&mut self) -> Result<&'a str> {
+    pub fn parse_token(&mut self) -> Result<&'a str> {
         if self.position >= self.s.len() {
             return Err(Error::UnexpectedEof("Expected token".into()));
         }
@@ -309,11 +338,11 @@ impl<'a> Parser<'a> {
         Ok(token)
     }
 
-    fn parse_number(&mut self) -> Result<u32> {
+    pub fn parse_number(&mut self) -> Result<u32> {
         Ok(self.parse_token()?.parse()?)
     }
 
-    fn parse_remaining(&mut self) -> Result<&str> {
+    pub fn parse_remaining(&mut self) -> Result<&str> {
         if self.position > self.s.len() {
             return Err(Error::UnexpectedEof("Expected token".into()));
         }
@@ -387,6 +416,19 @@ mod parser_tests {
         assert_eq!(parser.parse_until("_").unwrap(), "abc");
         parser.expect("_").unwrap();
         assert!(parser.parse_until("_").is_err());
+    }
+
+    #[test]
+    fn parse_until_any() {
+        let mut parser = Parser::new("abc_def");
+        assert_eq!(parser.parse_until_any(&['_', '-']).unwrap(), "abc");
+        parser.expect("_").unwrap();
+        assert!(parser.parse_until_any(&['_', '-']).is_err());
+
+        let mut parser = Parser::new("abc-def");
+        assert_eq!(parser.parse_until_any(&['_', '-']).unwrap(), "abc");
+        parser.expect("-").unwrap();
+        assert!(parser.parse_until_any(&['_', '-']).is_err());
     }
 
     #[test]
