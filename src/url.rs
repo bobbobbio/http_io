@@ -171,7 +171,7 @@ impl str::FromStr for Path {
 }
 
 #[derive(PartialEq, Debug)]
-struct UrlBuf {
+struct Url {
     protocol: Scheme,
     authority: String,
     port: Option<u16>,
@@ -182,7 +182,7 @@ struct UrlBuf {
 }
 
 #[cfg(test)]
-impl UrlBuf {
+impl Url {
     fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>, S4: Into<String>>(
         protocol: Scheme,
         authority: S1,
@@ -204,7 +204,7 @@ impl UrlBuf {
     }
 }
 
-impl fmt::Display for UrlBuf {
+impl fmt::Display for Url {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -232,7 +232,7 @@ impl fmt::Display for UrlBuf {
     }
 }
 
-impl str::FromStr for UrlBuf {
+impl str::FromStr for Url {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -304,7 +304,7 @@ mod tests {
     use super::*;
 
     fn round_trip_test(s: &str) {
-        let url: UrlBuf = str::parse(s).unwrap();
+        let url: Url = str::parse(s).unwrap();
         assert_eq!(&format!("{}", url), s);
     }
 
@@ -332,8 +332,8 @@ mod tests {
         fragment: Option<&str>,
         user_information: Option<&str>,
     ) {
-        let actual_url: UrlBuf = str::parse(input).unwrap();
-        let expected_url = UrlBuf::new(
+        let actual_url: Url = str::parse(input).unwrap();
+        let expected_url = Url::new(
             protocol,
             authority,
             port,
