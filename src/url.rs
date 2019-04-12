@@ -129,12 +129,12 @@ fn percent_decode_error() {
 }
 
 #[derive(PartialEq, Debug)]
-struct Uri {
+struct Path {
     components: Vec<String>,
 }
 
 #[cfg(test)]
-impl Uri {
+impl Path {
     fn new(components: &[&str]) -> Self {
         Self {
             components: components.iter().map(|&c| c.into()).collect(),
@@ -142,7 +142,7 @@ impl Uri {
     }
 }
 
-impl fmt::Display for Uri {
+impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -156,11 +156,11 @@ impl fmt::Display for Uri {
     }
 }
 
-impl str::FromStr for Uri {
+impl str::FromStr for Path {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Ok(Uri {
+        Ok(Path {
             components: s
                 .split("/")
                 .filter(|s| s.len() > 0)
@@ -175,7 +175,7 @@ struct UrlBuf {
     protocol: Scheme,
     authority: String,
     port: Option<u16>,
-    uri: Uri,
+    path: Path,
     query: Option<String>,
     fragment: Option<String>,
     user_information: Option<String>,
@@ -187,7 +187,7 @@ impl UrlBuf {
         protocol: Scheme,
         authority: S1,
         port: Option<u16>,
-        uri: Uri,
+        path: Path,
         query: Option<S2>,
         fragment: Option<S3>,
         user_information: Option<S4>,
@@ -196,7 +196,7 @@ impl UrlBuf {
             protocol,
             authority: authority.into(),
             port,
-            uri,
+            path,
             query: query.map(Into::into),
             fragment: fragment.map(Into::into),
             user_information: user_information.map(Into::into),
@@ -219,7 +219,7 @@ impl fmt::Display for UrlBuf {
                 .as_ref()
                 .map(|d| format!(":{}", d))
                 .unwrap_or("".into()),
-            self.uri,
+            self.path,
             self.query
                 .as_ref()
                 .map(|d| format!("?{}", d))
@@ -266,7 +266,7 @@ impl str::FromStr for UrlBuf {
 
         parser.expect("/").ok();
 
-        let uri = parser
+        let path = parser
             .parse_until_any(&['?', '#'])
             .or_else(|_| parser.parse_remaining())
             .unwrap_or("")
@@ -291,7 +291,7 @@ impl str::FromStr for UrlBuf {
             protocol,
             authority,
             port,
-            uri,
+            path,
             query,
             fragment,
             user_information,
@@ -327,7 +327,7 @@ mod tests {
         protocol: Scheme,
         authority: &str,
         port: Option<u16>,
-        uri: &[&str],
+        path: &[&str],
         query: Option<&str>,
         fragment: Option<&str>,
         user_information: Option<&str>,
@@ -337,7 +337,7 @@ mod tests {
             protocol,
             authority,
             port,
-            Uri::new(uri),
+            Path::new(path),
             query,
             fragment,
             user_information,
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_uri_encoding() {
+    fn parse_path_encoding() {
         parse_test(
             "http://google.com/%2ffoo%2fbar",
             Scheme::Http,
