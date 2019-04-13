@@ -72,13 +72,12 @@ impl StreamConnector for std::net::TcpStream {
                 format!("Failed to lookup {}", &url.authority),
             )
         };
-        Ok(std::net::ToSocketAddrs::to_socket_addrs(&(
-            url.authority.as_ref(),
-            url.port.unwrap_or(80),
-        ))
-        .map_err(|_| err())?
-        .next()
-        .ok_or(err())?)
+        Ok(
+            std::net::ToSocketAddrs::to_socket_addrs(&(url.authority.as_ref(), url.port()?))
+                .map_err(|_| err())?
+                .next()
+                .ok_or(err())?,
+        )
     }
 }
 
@@ -130,7 +129,7 @@ where
     let url = url
         .try_into()
         .map_err(|e| Error::ParseError(e.to_string()))?;
-    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port.unwrap_or(80)))?;
+    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
     let response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
 
     if response.status != HttpStatus::OK {
@@ -150,7 +149,7 @@ where
     let url = url
         .try_into()
         .map_err(|e| Error::ParseError(e.to_string()))?;
-    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port.unwrap_or(80)))?;
+    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
     let mut request = HttpRequestBuilder::get(url)?.send(s)?;
 
     io::copy(&mut body, &mut request)?;

@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         .unwrap_or("http://www.google.com".into())
         .parse()?;
 
-    let s = net::TcpStream::connect((url.authority.as_ref(), url.port.unwrap_or(80)))?;
+    let s = net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
     let mut response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
 
     println!("{:#?}", response.headers);

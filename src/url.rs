@@ -173,7 +173,7 @@ impl str::FromStr for Path {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Url {
-    pub protocol: Scheme,
+    pub scheme: Scheme,
     pub authority: String,
     pub port: Option<u16>,
     pub path: Path,
@@ -185,7 +185,7 @@ pub struct Url {
 impl Url {
     #[cfg(test)]
     fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>, S4: Into<String>>(
-        protocol: Scheme,
+        scheme: Scheme,
         authority: S1,
         port: Option<u16>,
         path: Path,
@@ -194,7 +194,7 @@ impl Url {
         user_information: Option<S4>,
     ) -> Self {
         Self {
-            protocol,
+            scheme,
             authority: authority.into(),
             port,
             path,
@@ -218,6 +218,17 @@ impl Url {
                 .unwrap_or("".into()),
         )
     }
+
+    pub fn port(&self) -> Result<u16> {
+        if let Some(p) = self.port {
+            return Ok(p);
+        }
+        match &self.scheme {
+            Scheme::Http => Ok(80),
+            Scheme::Https => Ok(443),
+            s => Err(Error::UrlError(format!("port for {} not known", s))),
+        }
+    }
 }
 
 impl TryFrom<&str> for Url {
@@ -232,7 +243,7 @@ impl fmt::Display for Url {
         write!(
             f,
             "{}://{}{}{}{}",
-            self.protocol,
+            self.scheme,
             self.user_information
                 .as_ref()
                 .map(|d| format!("{}@", d))
@@ -253,7 +264,7 @@ impl str::FromStr for Url {
     fn from_str(s: &str) -> Result<Self> {
         let mut parser = Parser::new(s);
 
-        let protocol: Scheme = str::parse(parser.parse_until(":")?)?;
+        let scheme: Scheme = str::parse(parser.parse_until(":")?)?;
         parser.expect("://")?;
 
         let user_information = match parser.parse_until("@") {
@@ -303,7 +314,7 @@ impl str::FromStr for Url {
         };
 
         Ok(Self {
-            protocol,
+            scheme,
             authority,
             port,
             path,
@@ -342,7 +353,7 @@ mod tests {
 
     fn parse_test(
         input: &str,
-        protocol: Scheme,
+        scheme: Scheme,
         authority: &str,
         port: Option<u16>,
         path: &[&str],
@@ -352,7 +363,7 @@ mod tests {
     ) {
         let actual_url: Url = str::parse(input).unwrap();
         let expected_url = Url::new(
-            protocol,
+            scheme,
             authority,
             port,
             Path::new(path),
@@ -493,5 +504,25 @@ mod tests {
             Some("foobar"),
             None,
         );
+    }
+
+    #[test]
+    fn scheme_to_port() -> Result<()> {
+        let url: Url = "http://google.com".parse()?;
+        assert_eq!(url.port()?, 80);
+
+        let url: Url = "https://google.com".parse()?;
+        assert_eq!(url.port()?, 443);
+
+        let url: Url = "http://google.com:9090".parse()?;
+        assert_eq!(url.port()?, 9090);
+
+        let url: Url = "file://google.com".parse()?;
+        assert!(url.port().is_err());
+
+        let url: Url = "derp://google.com".parse()?;
+        assert!(url.port().is_err());
+
+        Ok(())
     }
 }

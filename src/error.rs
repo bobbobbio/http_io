@@ -13,6 +13,7 @@ pub enum Error {
     IoError(io::Error),
     UnexpectedEof(String),
     UnexpectedStatus(HttpStatus),
+    UrlError(String),
 }
 
 pub type Result<R> = std::result::Result<R, Error>;
@@ -32,6 +33,7 @@ impl error::Error for Error {
             Error::ParseIntError(e) => Some(e),
             Error::UnexpectedEof(_) => None,
             Error::UnexpectedStatus(_) => None,
+            Error::UrlError(_) => None,
         }
     }
 }
