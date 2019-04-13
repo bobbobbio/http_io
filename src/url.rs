@@ -1,10 +1,11 @@
 use crate::error::{Error, Result};
 use crate::protocol::Parser;
+use std::convert::TryFrom;
 use std::fmt;
 use std::str;
 
-#[derive(PartialEq, Debug)]
-enum Scheme {
+#[derive(PartialEq, Debug, Clone)]
+pub enum Scheme {
     Http,
     Https,
     File,
@@ -128,8 +129,8 @@ fn percent_decode_error() {
     assert!(percent_decode("%FG").is_err());
 }
 
-#[derive(PartialEq, Debug)]
-struct Path {
+#[derive(PartialEq, Debug, Clone)]
+pub struct Path {
     components: Vec<String>,
 }
 
@@ -170,19 +171,19 @@ impl str::FromStr for Path {
     }
 }
 
-#[derive(PartialEq, Debug)]
-struct Url {
-    protocol: Scheme,
-    authority: String,
-    port: Option<u16>,
-    path: Path,
-    query: Option<String>,
-    fragment: Option<String>,
-    user_information: Option<String>,
+#[derive(PartialEq, Debug, Clone)]
+pub struct Url {
+    pub protocol: Scheme,
+    pub authority: String,
+    pub port: Option<u16>,
+    pub path: Path,
+    pub query: Option<String>,
+    pub fragment: Option<String>,
+    pub user_information: Option<String>,
 }
 
-#[cfg(test)]
 impl Url {
+    #[cfg(test)]
     fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>, S4: Into<String>>(
         protocol: Scheme,
         authority: S1,
@@ -201,6 +202,28 @@ impl Url {
             fragment: fragment.map(Into::into),
             user_information: user_information.map(Into::into),
         }
+    }
+
+    pub fn path(&self) -> String {
+        format!(
+            "{}{}{}",
+            self.path,
+            self.query
+                .as_ref()
+                .map(|d| format!("?{}", d))
+                .unwrap_or("".into()),
+            self.fragment
+                .as_ref()
+                .map(|d| format!("#{}", d))
+                .unwrap_or("".into()),
+        )
+    }
+}
+
+impl TryFrom<&str> for Url {
+    type Error = Error;
+    fn try_from(value: &str) -> Result<Self> {
+        value.parse()
     }
 }
 

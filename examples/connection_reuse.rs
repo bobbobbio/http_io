@@ -2,19 +2,22 @@ use std::io::{self, Read, Write};
 
 use http_io::client::HttpClient;
 use http_io::error::Result;
+use http_io::url::Url;
 
 fn main() -> Result<()> {
     let args = std::env::args();
-    let host = args.skip(1).next().unwrap_or("www.google.com".into());
+    let url: Url = args
+        .skip(1)
+        .next()
+        .unwrap_or("http://www.google.com".into())
+        .parse()?;
 
     let mut client = HttpClient::<std::net::TcpStream>::new();
-    for uri in &["/", "/favicon.ico", "/robots.txt"] {
+    for path in &["/", "/favicon.ico", "/robots.txt"] {
+        let mut url = url.clone();
+        url.path = path.parse()?;
         let mut body = Vec::new();
-        client
-            .get(&host, uri)?
-            .finish()?
-            .body
-            .read_to_end(&mut body)?;
+        client.get(url)?.finish()?.body.read_to_end(&mut body)?;
         io::stdout().write(&body)?;
     }
 

@@ -1,5 +1,4 @@
 use crate::protocol::HttpStatus;
-use std::convert;
 use std::error;
 use std::fmt;
 use std::io;
@@ -37,25 +36,25 @@ impl error::Error for Error {
     }
 }
 
-impl convert::From<str::Utf8Error> for Error {
+impl From<str::Utf8Error> for Error {
     fn from(e: str::Utf8Error) -> Self {
         Error::Utf8Error(e)
     }
 }
 
-impl convert::From<io::Error> for Error {
+impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::IoError(e)
     }
 }
 
-impl convert::From<num::ParseIntError> for Error {
+impl From<num::ParseIntError> for Error {
     fn from(e: num::ParseIntError) -> Self {
         Error::ParseIntError(e)
     }
 }
 
-impl<W> convert::From<io::IntoInnerError<W>> for Error {
+impl<W> From<io::IntoInnerError<W>> for Error {
     fn from(e: io::IntoInnerError<W>) -> Self {
         Error::IoError(io::Error::new(
             io::ErrorKind::Other,

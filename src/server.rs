@@ -94,30 +94,29 @@ mod client_server_tests {
         }
     }
 
-    fn connected_client_server() -> (
+    fn connected_client_server() -> Result<(
         net::TcpStream,
         HttpServer<net::TcpListener, TestRequestHandler>,
-    ) {
-        let server_socket = net::TcpListener::bind("localhost:0").unwrap();
-        let server_address = server_socket.local_addr().unwrap();
+    )> {
+        let server_socket = net::TcpListener::bind("localhost:0")?;
+        let server_address = server_socket.local_addr()?;
         let handler = TestRequestHandler::new();
         let server = HttpServer::new(server_socket, handler);
 
-        let client_socket = net::TcpStream::connect(server_address).unwrap();
+        let client_socket = net::TcpStream::connect(server_address)?;
 
-        (client_socket, server)
+        Ok((client_socket, server))
     }
 
     #[test]
-    fn request_one() {
-        let (client_socket, server) = connected_client_server();
+    fn request_one() -> Result<()> {
+        let (client_socket, server) = connected_client_server()?;
         let handle = thread::spawn(move || server.serve_one());
-        let response = HttpRequestBuilder::get("localhost", "/")
-            .send(client_socket)
-            .unwrap()
-            .finish()
-            .unwrap();
-        handle.join().unwrap().unwrap();
+        let response = HttpRequestBuilder::get("http://localhost/")?
+            .send(client_socket)?
+            .finish()?;
+        handle.join().unwrap()?;
         assert_eq!(response.status, HttpStatus::OK);
+        Ok(())
     }
 }
