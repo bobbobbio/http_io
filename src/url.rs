@@ -210,11 +210,11 @@ impl Url {
             self.path,
             self.query
                 .as_ref()
-                .map(|d| format!("?{}", d))
+                .map(|d| format!("?{}", percent_encode(d)))
                 .unwrap_or("".into()),
             self.fragment
                 .as_ref()
-                .map(|d| format!("#{}", d))
+                .map(|d| format!("#{}", percent_encode(d)))
                 .unwrap_or("".into()),
         )
     }
@@ -231,7 +231,7 @@ impl fmt::Display for Url {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}://{}{}{}{}{}{}",
+            "{}://{}{}{}{}",
             self.protocol,
             self.user_information
                 .as_ref()
@@ -242,15 +242,7 @@ impl fmt::Display for Url {
                 .as_ref()
                 .map(|d| format!(":{}", d))
                 .unwrap_or("".into()),
-            self.path,
-            self.query
-                .as_ref()
-                .map(|d| format!("?{}", d))
-                .unwrap_or("".into()),
-            self.fragment
-                .as_ref()
-                .map(|d| format!("#{}", d))
-                .unwrap_or("".into()),
+            self.path()
         )
     }
 }
@@ -296,17 +288,17 @@ impl str::FromStr for Url {
             .parse()?;
 
         let query = match parser.expect("?") {
-            Ok(_) => Some(
+            Ok(_) => Some(percent_decode(
                 parser
                     .parse_until("#")
-                    .or_else(|_| parser.parse_remaining())?
-                    .into(),
-            ),
+                    .or_else(|_| parser.parse_remaining())
+                    .unwrap_or(""),
+            )?),
             Err(_) => None,
         };
 
         let fragment = match parser.expect("#") {
-            Ok(_) => Some(parser.parse_remaining()?.into()),
+            Ok(_) => Some(percent_decode(parser.parse_remaining().unwrap_or(""))?),
             Err(_) => None,
         };
 
@@ -338,11 +330,14 @@ mod tests {
         round_trip_test("http://google.com/something.html");
         round_trip_test("ftp://google.com/something.html");
         round_trip_test("ftp://google.com/something.html?foo#bar");
-        round_trip_test("ftp://google.com/something.html#bar?foo");
+        round_trip_test("ftp://google.com/something.html#bar%3ffoo");
         round_trip_test("ftp://www.google.com/pie");
         round_trip_test("ftp://user:pass@www.google.com/pie");
         round_trip_test("ftp://user:pass@www.google.com:9090/pie");
         round_trip_test("http://www.google.com/%2fderp%2fface");
+        round_trip_test("http://www.google.com/?%2fderp%2fface");
+        round_trip_test("http://www.google.com/#%2fderp%2fface");
+        round_trip_test("http://www.google.com/?#");
     }
 
     fn parse_test(
