@@ -1,8 +1,7 @@
-use std::io::{self, Read, Write};
-
 use http_io::client::HttpClient;
 use http_io::error::Result;
 use http_io::url::Url;
+use std::io;
 
 fn main() -> Result<()> {
     let args = std::env::args();
@@ -16,9 +15,7 @@ fn main() -> Result<()> {
     for path in &["/", "/favicon.ico", "/robots.txt"] {
         let mut url = url.clone();
         url.path = path.parse()?;
-        let mut body = Vec::new();
-        client.get(url)?.finish()?.body.read_to_end(&mut body)?;
-        io::stdout().write(&body)?;
+        io::copy(&mut client.get(url)?.finish()?.body, &mut io::stdout())?;
     }
 
     Ok(())

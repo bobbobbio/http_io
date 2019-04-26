@@ -1,8 +1,76 @@
+//! A very simple HTTP server. It is not suitable for production workloads.
+//! Users should write their own request handler which implements the `HttpRequestHandler` trait.
+//!
+//! # File Server Example
+//! ```rust
+//! use std::io;
+//! use std::net;
+//! use std::path::PathBuf;
+//! use std::thread;
+//!
+//! use http_io::error::Result;
+//! use http_io::protocol::{HttpBody, HttpResponse, HttpStatus};
+//! use http_io::server::{HttpRequestHandler, HttpServer};
+//!
+//! struct FileHandler {
+//!     file_root: PathBuf,
+//! }
+//!
+//! impl FileHandler {
+//!     fn new<P: Into<PathBuf>>(file_root: P) -> Self {
+//!         FileHandler {
+//!             file_root: file_root.into(),
+//!         }
+//!     }
+//! }
+//!
+//! impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
+//!     fn get(
+//!         &self,
+//!         uri: String,
+//!         _stream: HttpBody<&mut I>,
+//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!         let path = self.file_root.join(uri.trim_start_matches("/"));
+//!         Ok(HttpResponse::new(
+//!             HttpStatus::OK,
+//!             Box::new(std::fs::File::open(path)?),
+//!         ))
+//!     }
+//!
+//!     fn put(
+//!         &self,
+//!         uri: String,
+//!         mut stream: HttpBody<&mut I>,
+//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!         let path = self.file_root.join(uri.trim_start_matches("/"));
+//!         let mut file = std::fs::File::create(path)?;
+//!         io::copy(&mut stream, &mut file)?;
+//!         Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
+//!     }
+//! }
+//!
+//! fn main() -> Result<()> {
+//!     let handle: thread::JoinHandle<Result<()>> = thread::spawn(|| {
+//!         let handler = FileHandler::new(std::env::current_dir()?);
+//!         let socket = net::TcpListener::bind("127.0.0.1:8080")?;
+//!         let server = HttpServer::new(socket, handler);
+//!         server.serve_one()?;
+//!         Ok(())
+//!     });
+//!
+//!     let mut body = http_io::client::get("http://localhost:8080/src/server.rs")?;
+//!     io::copy(&mut body, &mut std::io::stdout())?;
+//!     handle.join().unwrap()?;
+//!
+//!     Ok(())
+//! }
+//! ```
 use crate::error::Result;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
 use std::io;
 use std::net;
 
+/// Represents the ability to accept a new abstract connection.
 pub trait Listen {
     type stream: io::Read + io::Write;
     fn accept(&self) -> Result<Self::stream>;
@@ -16,6 +84,7 @@ impl Listen for net::TcpListener {
     }
 }
 
+/// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
     fn get(&self, uri: String, stream: HttpBody<&mut I>)
         -> Result<HttpResponse<Box<dyn io::Read>>>;
@@ -23,6 +92,8 @@ pub trait HttpRequestHandler<I: io::Read> {
         -> Result<HttpResponse<Box<dyn io::Read>>>;
 }
 
+/// A simple HTTP server. Not suited for production workloads, better used in tests and small
+/// projects.
 pub struct HttpServer<L: Listen, H: HttpRequestHandler<L::stream>> {
     connection_stream: L,
     request_handler: H,
@@ -36,7 +107,8 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         }
     }
 
-    fn serve_one(&self) -> Result<()> {
+    /// Accept one new HTTP stream and serve one request off it.
+    pub fn serve_one(&self) -> Result<()> {
         let mut stream = self.connection_stream.accept()?;
         let request = HttpRequest::deserialize(io::BufReader::new(&mut stream))?;
 
@@ -51,6 +123,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         Ok(())
     }
 
+    /// Run `serve_one` in a loop forever
     pub fn serve_forever(&self) -> ! {
         loop {
             match self.serve_one() {

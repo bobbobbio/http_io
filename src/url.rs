@@ -1,3 +1,18 @@
+//! A RFC 3986 URL
+//!
+//! # Example
+//! ```rust
+//! use http_io::url;
+//!
+//! let url: url::Url = "http://user:pass@www.google.com:8080/foo?bar#baz".parse().unwrap();
+//! assert_eq!(url.scheme, url::Scheme::Http);
+//! assert_eq!(url.authority, "www.google.com");
+//! assert_eq!(url.port, Some(8080));
+//! assert_eq!(url.path, "/foo".parse().unwrap());
+//! assert_eq!(url.query, Some("bar".into()));
+//! assert_eq!(url.fragment, Some("baz".into()));
+//! assert_eq!(url.user_information, Some("user:pass".into()));
+//! ```
 use crate::error::{Error, Result};
 use crate::protocol::Parser;
 use std::convert::TryFrom;

@@ -1,3 +1,4 @@
+//! Types representing various parts of the HTTP protocol.
 use crate::error::{Error, Result};
 use std::cmp;
 use std::collections::BTreeMap;

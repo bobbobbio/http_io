@@ -1,3 +1,60 @@
+//! Code for making HTTP requests.
+//!
+//! # Examples
+//!
+//! # Making simple requests
+//! ```rust
+//! use http_io::error::Result;
+//! use std::fs::File;
+//! use std::io;
+//!
+//! fn main() -> Result<()> {
+//!     // Stream contents of url to stdout
+//!     let mut body = http_io::client::get("http://www.google.com")?;
+//!     io::copy(&mut body, &mut std::io::stdout())?;
+//!
+//!     // Stream contents of file to remote server
+//!     let file = File::open("src/client.rs")?;
+//!     http_io::client::put("http://www.google.com", file)?;
+//!     Ok(())
+//! }
+//! ```
+//! # Using the `HttpRequestBuilder` for more control
+//!
+//! ```rust
+//! use http_io::client::HttpRequestBuilder;
+//! use http_io::error::Result;
+//! use http_io::url::Url;
+//! use std::io;
+//! use std::net::TcpStream;
+//!
+//! fn main() -> Result<()> {
+//!     let url: Url = "http://www.google.com".parse()?;
+//!     let s = TcpStream::connect((url.authority.as_ref(), url.port()?))?;
+//!     let mut response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
+//!     println!("{:#?}", response.headers);
+//!     io::copy(&mut response.body, &mut io::stdout())?;
+//!     Ok(())
+//! }
+//! ```
+//! # Using `HttpClient` to keep connections open
+//! ```rust
+//! use http_io::client::HttpClient;
+//! use http_io::error::Result;
+//! use http_io::url::Url;
+//! use std::io;
+//!
+//! fn main() -> Result<()> {
+//!     let url: Url = "http://www.google.com".parse()?;
+//!     let mut client = HttpClient::<std::net::TcpStream>::new();
+//!     for path in &["/", "/favicon.ico", "/robots.txt"] {
+//!         let mut url = url.clone();
+//!         url.path = path.parse()?;
+//!         io::copy(&mut client.get(url)?.finish()?.body, &mut io::stdout())?;
+//!     }
+//!     Ok(())
+//! }
+//!```
 use crate::error::{Error, Result};
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpStatus, OutgoingBody};
 use crate::url::Url;
@@ -7,11 +64,13 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::io;
 
+/// A struct for building up an HTTP request.
 pub struct HttpRequestBuilder {
     request: HttpRequest<io::Empty>,
 }
 
 impl HttpRequestBuilder {
+    /// Create a `HttpRequestBuilder` to build a GET request
     pub fn get<U: TryInto<Url>>(url: U) -> Result<Self>
     where
         <U as TryInto<Url>>::Error: Display,
@@ -19,6 +78,7 @@ impl HttpRequestBuilder {
         HttpRequestBuilder::new(url, HttpMethod::Get)
     }
 
+    /// Create a `HttpRequestBuilder` to build a PUT request
     pub fn put<U: TryInto<Url>>(url: U) -> Result<Self>
     where
         <U as TryInto<Url>>::Error: Display,
@@ -26,6 +86,7 @@ impl HttpRequestBuilder {
         HttpRequestBuilder::new(url, HttpMethod::Put)
     }
 
+    /// Create a `HttpRequestBuilder`. May fail if the given url does not parse.
     pub fn new<U: TryInto<Url>>(url: U, method: HttpMethod) -> Result<Self>
     where
         <U as TryInto<Url>>::Error: Display,
@@ -40,16 +101,19 @@ impl HttpRequestBuilder {
         Ok(HttpRequestBuilder { request })
     }
 
+    /// Send the built request on the given socket
     pub fn send<S: io::Read + io::Write>(self, socket: S) -> Result<OutgoingBody<S>> {
         self.request.serialize(io::BufWriter::new(socket))
     }
 
+    /// Add a header to the request
     pub fn add_header<S1: AsRef<str>, S2: AsRef<str>>(mut self, key: S1, value: S2) -> Self {
         self.request.add_header(key.as_ref(), value.as_ref());
         self
     }
 }
 
+/// Represents the ability to connect an abstract stream to some destination address.
 pub trait StreamConnector {
     type stream: io::Read + io::Write;
     type stream_addr: Hash + Eq + Clone;
@@ -81,11 +145,13 @@ impl StreamConnector for std::net::TcpStream {
     }
 }
 
+/// An HTTP client that keeps connections open.
 pub struct HttpClient<S: StreamConnector> {
     streams: HashMap<S::stream_addr, S::stream>,
 }
 
 impl<S: StreamConnector> HttpClient<S> {
+    /// Create an `HTTPClient`
     pub fn new() -> Self {
         HttpClient {
             streams: HashMap::new(),
@@ -101,6 +167,7 @@ impl<S: StreamConnector> HttpClient<S> {
         Ok(self.streams.get_mut(&stream_addr).unwrap())
     }
 
+    /// Execute a GET request. The request isn't completed until `OutgoingBody::finish` is called.
     pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::stream>>
     where
         <U as TryInto<Url>>::Error: Display,
@@ -111,6 +178,7 @@ impl<S: StreamConnector> HttpClient<S> {
         Ok(HttpRequestBuilder::get(url.clone())?.send(self.get_socket(url)?)?)
     }
 
+    /// Execute a PUT request. The request isn't completed until `OutgoingBody::finish` is called.
     pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::stream>>
     where
         <U as TryInto<Url>>::Error: Display,
@@ -122,6 +190,7 @@ impl<S: StreamConnector> HttpClient<S> {
     }
 }
 
+/// Execute a GET request.
 pub fn get<U: TryInto<Url>>(url: U) -> Result<HttpBody<std::net::TcpStream>>
 where
     <U as TryInto<Url>>::Error: Display,
@@ -139,6 +208,7 @@ where
     Ok(response.body)
 }
 
+/// Execute a PUT request.
 pub fn put<U: TryInto<Url>, R: io::Read>(
     url: U,
     mut body: R,
