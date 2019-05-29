@@ -1,11 +1,15 @@
 //! Types representing various parts of the HTTP protocol.
+
 use crate::error::{Error, Result};
-use std::cmp;
+use crate::io::{self, Read, Write};
+#[cfg(not(feature = "std"))]
+use alloc::{collections::BTreeMap, format, string::String, vec, vec::Vec};
+use core::cmp;
+use core::convert;
+use core::fmt;
+use core::str;
+#[cfg(feature = "std")]
 use std::collections::BTreeMap;
-use std::convert;
-use std::fmt;
-use std::io::{self, Read, Write};
-use std::str;
 
 struct HttpBodyChunk<S: io::Read> {
     inner: io::Take<HttpReadTilCloseBody<S>>,
@@ -66,8 +70,7 @@ impl<S: io::Read> io::Read for HttpChunkedBody<S> {
                 Ok(read)
             }
         } else if let Some(stream) = self.stream.take() {
-            let new_chunk = HttpBodyChunk::new(stream)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            let new_chunk = HttpBodyChunk::new(stream)?;
             match new_chunk {
                 Some(chunk) => {
                     self.chunk = Some(chunk);

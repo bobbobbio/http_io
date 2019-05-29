@@ -55,14 +55,19 @@
 //!     Ok(())
 //! }
 //!```
+
+#[cfg(not(feature = "std"))]
+use alloc::string::ToString;
+use core::convert::TryInto;
+use core::fmt::Display;
+use core::hash::Hash;
 use crate::error::{Error, Result};
-use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpStatus, OutgoingBody};
+use crate::io;
+use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
+#[cfg(feature = "std")]
+use crate::protocol::{HttpBody, HttpStatus};
 use crate::url::Url;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::fmt::Display;
-use std::hash::Hash;
-use std::io;
+use hashbrown::HashMap;
 
 /// A struct for building up an HTTP request.
 pub struct HttpRequestBuilder {
@@ -95,7 +100,7 @@ impl HttpRequestBuilder {
             .try_into()
             .map_err(|e| Error::ParseError(e.to_string()))?;
         let mut request = HttpRequest::new(method, url.path());
-        request.add_header("Host", url.authority.as_ref());
+        request.add_header("Host", &url.authority);
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
         Ok(HttpRequestBuilder { request })
@@ -121,6 +126,7 @@ pub trait StreamConnector {
     fn to_stream_addr(url: Url) -> Result<Self::stream_addr>;
 }
 
+#[cfg(feature = "std")]
 impl StreamConnector for std::net::TcpStream {
     type stream = std::net::TcpStream;
     type stream_addr = std::net::SocketAddr;
@@ -191,6 +197,7 @@ impl<S: StreamConnector> HttpClient<S> {
 }
 
 /// Execute a GET request.
+#[cfg(feature = "std")]
 pub fn get<U: TryInto<Url>>(url: U) -> Result<HttpBody<std::net::TcpStream>>
 where
     <U as TryInto<Url>>::Error: Display,
@@ -209,6 +216,7 @@ where
 }
 
 /// Execute a PUT request.
+#[cfg(feature = "std")]
 pub fn put<U: TryInto<Url>, R: io::Read>(
     url: U,
     mut body: R,

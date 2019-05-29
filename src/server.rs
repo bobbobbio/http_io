@@ -65,10 +65,11 @@
 //!     Ok(())
 //! }
 //! ```
+#[cfg(not(feature = "std"))]
+use alloc::{boxed::Box, string::String};
 use crate::error::Result;
+use crate::io;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
-use std::io;
-use std::net;
 
 /// Represents the ability to accept a new abstract connection.
 pub trait Listen {
@@ -76,10 +77,11 @@ pub trait Listen {
     fn accept(&self) -> Result<Self::stream>;
 }
 
-impl Listen for net::TcpListener {
-    type stream = net::TcpStream;
-    fn accept(&self) -> Result<net::TcpStream> {
-        let (stream, _) = net::TcpListener::accept(self)?;
+#[cfg(feature = "std")]
+impl Listen for std::net::TcpListener {
+    type stream = std::net::TcpStream;
+    fn accept(&self) -> Result<std::net::TcpStream> {
+        let (stream, _) = std::net::TcpListener::accept(self)?;
         Ok(stream)
     }
 }
@@ -124,6 +126,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     }
 
     /// Run `serve_one` in a loop forever
+    #[cfg(feature = "std")]
     pub fn serve_forever(&self) -> ! {
         loop {
             match self.serve_one() {

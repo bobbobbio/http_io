@@ -15,9 +15,17 @@
 //! ```
 use crate::error::{Error, Result};
 use crate::protocol::Parser;
-use std::convert::TryFrom;
-use std::fmt;
-use std::str;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    format,
+    slice::SliceConcatExt,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
+use core::convert::TryFrom;
+use core::fmt;
+use core::str;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Scheme {

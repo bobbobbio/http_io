@@ -1,40 +1,28 @@
 use crate::protocol::HttpStatus;
-use std::error;
-use std::fmt;
-use std::io;
-use std::num;
-use std::str;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+use core::fmt;
+use core::num;
+use core::str;
 
 #[derive(Debug)]
 pub enum Error {
     ParseError(String),
     ParseIntError(num::ParseIntError),
     Utf8Error(str::Utf8Error),
-    IoError(io::Error),
+    #[cfg(feature = "std")]
+    IoError(std::io::Error),
     UnexpectedEof(String),
     UnexpectedStatus(HttpStatus),
     UrlError(String),
+    Other(String),
 }
 
-pub type Result<R> = std::result::Result<R, Error>;
+pub type Result<R> = core::result::Result<R, Error>;
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Error::ParseError(_) => None,
-            Error::IoError(e) => Some(e),
-            Error::Utf8Error(e) => Some(e),
-            Error::ParseIntError(e) => Some(e),
-            Error::UnexpectedEof(_) => None,
-            Error::UnexpectedStatus(_) => None,
-            Error::UrlError(_) => None,
-        }
     }
 }
 
@@ -44,8 +32,9 @@ impl From<str::Utf8Error> for Error {
     }
 }
 
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
+#[cfg(feature = "std")]
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
         Error::IoError(e)
     }
 }
@@ -56,11 +45,19 @@ impl From<num::ParseIntError> for Error {
     }
 }
 
-impl<W> From<io::IntoInnerError<W>> for Error {
-    fn from(e: io::IntoInnerError<W>) -> Self {
-        Error::IoError(io::Error::new(
-            io::ErrorKind::Other,
+#[cfg(feature = "std")]
+impl<W> From<std::io::IntoInnerError<W>> for Error {
+    fn from(e: std::io::IntoInnerError<W>) -> Self {
+        Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
             format!("{}", e.error()),
         ))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<Error> for std::io::Error {
+    fn from(e: Error) -> Self {
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
     }
 }

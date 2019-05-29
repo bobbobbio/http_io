@@ -8,4 +8,9 @@ description = """
 A library with limited dependencies containing an HTTP client and server.
 """
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
+hashbrown = "*"
