@@ -2,7 +2,7 @@
 
 Crate containing HTTP client and server.
 
-- Designed to have limited dependencies, goal to support `#![no_std]`.
+- Designed to have limited dependencies, supports `#![no_std]`.
 - Focus on streaming IO.
 - Support for providing your own transport.
 
