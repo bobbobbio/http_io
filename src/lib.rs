@@ -19,5 +19,8 @@ pub mod url;
 #[cfg(not(feature = "std"))]
 mod io;
 
+#[cfg(not(feature = "std"))]
+pub use io::{Read, Write};
+
 #[cfg(feature = "std")]
 use std::io;

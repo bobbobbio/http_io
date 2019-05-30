@@ -1,4 +1,4 @@
-//! This crate provides re-implementations of things from std::io for building without std
+//! This module provides re-implementations of things from std::io for building without std
 
 pub use crate::error::{Error, Result};
 
