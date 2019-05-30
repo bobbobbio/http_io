@@ -4,6 +4,9 @@ rust:
   - beta
   - nightly
 cache: cargo
-script:
-  - cargo test
-  - cargo test --no-default-features
+matrix:
+  include:
+    - name: "no_std"
+      rust: nightly
+      script:
+        - cargo build --verbose --no-default-features
