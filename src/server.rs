@@ -50,15 +50,17 @@
 //! }
 //!
 //! fn main() -> Result<()> {
-//!     let handle: thread::JoinHandle<Result<()>> = thread::spawn(|| {
+//!     let socket = net::TcpListener::bind("127.0.0.1:0")?;
+//!     let port = socket.local_addr()?.port();
+//!     let handle: thread::JoinHandle<Result<()>> = thread::spawn(move || {
 //!         let handler = FileHandler::new(std::env::current_dir()?);
-//!         let socket = net::TcpListener::bind("127.0.0.1:8080")?;
 //!         let server = HttpServer::new(socket, handler);
 //!         server.serve_one()?;
 //!         Ok(())
 //!     });
 //!
-//!     let mut body = http_io::client::get("http://localhost:8080/src/server.rs")?;
+//!     let url = format!("http://localhost:{}/src/server.rs", port);
+//!     let mut body = http_io::client::get(url.as_ref())?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
 //!     handle.join().unwrap()?;
 //!
