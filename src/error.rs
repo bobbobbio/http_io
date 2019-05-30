@@ -10,13 +10,18 @@ pub enum Error {
     ParseError(String),
     ParseIntError(num::ParseIntError),
     Utf8Error(str::Utf8Error),
-    #[cfg(feature = "std")]
-    /// *This variant is available if http_io is built with the `"std"` feature.*
-    IoError(std::io::Error),
+    UnexpectedScheme(String),
     UnexpectedEof(String),
     UnexpectedStatus(HttpStatus),
     UrlError(String),
     Other(String),
+
+    #[cfg(feature = "std")]
+    /// *This variant is available if http_io is built with the `"std"` feature.*
+    IoError(std::io::Error),
+
+    #[cfg(feature = "openssl")]
+    SslError(String),
 }
 
 pub type Result<R> = core::result::Result<R, Error>;
@@ -60,5 +65,19 @@ impl<W> From<std::io::IntoInnerError<W>> for Error {
 impl From<Error> for std::io::Error {
     fn from(e: Error) -> Self {
         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+    }
+}
+
+#[cfg(feature = "openssl")]
+impl From<openssl::error::ErrorStack> for Error {
+    fn from(e: openssl::error::ErrorStack) -> Self {
+        Error::SslError(e.to_string())
+    }
+}
+
+#[cfg(feature = "openssl")]
+impl<S: fmt::Debug> From<openssl::ssl::HandshakeError<S>> for Error {
+    fn from(e: openssl::ssl::HandshakeError<S>) -> Self {
+        Error::SslError(e.to_string())
     }
 }

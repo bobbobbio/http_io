@@ -59,8 +59,10 @@
 use crate::error::{Error, Result};
 use crate::io;
 #[cfg(feature = "std")]
-use crate::protocol::{HttpBody, HttpStatus};
+use crate::protocol::HttpStatus;
 use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
+#[cfg(feature = "std")]
+use crate::url::Scheme;
 use crate::url::Url;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
@@ -68,6 +70,8 @@ use core::convert::TryInto;
 use core::fmt::Display;
 use core::hash::Hash;
 use hashbrown::HashMap;
+#[cfg(feature = "openssl")]
+use openssl::ssl::{SslConnector, SslMethod};
 
 /// A struct for building up an HTTP request.
 pub struct HttpRequestBuilder {
@@ -196,51 +200,72 @@ impl<S: StreamConnector> HttpClient<S> {
     }
 }
 
+#[cfg(feature = "std")]
+fn send_request<R: io::Read>(
+    builder: HttpRequestBuilder,
+    url: Url,
+    mut body: R,
+) -> Result<Box<io::Read>> {
+    let stream = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
+    let (status, body) = match &url.scheme {
+        #[cfg(feature = "openssl")]
+        Scheme::Https => {
+            // XXX I need a front-door way to support self-signed certificates.
+            #[allow(unused_mut)]
+            let mut connector = SslConnector::builder(SslMethod::tls())?;
+            #[cfg(test)]
+            connector.set_verify(openssl::ssl::SslVerifyMode::NONE);
+            let connector = connector.build();
+            let stream = connector.connect(&url.authority, stream)?;
+            let mut request = builder.send(stream)?;
+            io::copy(&mut body, &mut request)?;
+            let response = request.finish()?;
+            (response.status, Box::new(response.body) as Box<io::Read>)
+        }
+        Scheme::Http => {
+            let mut request = builder.send(stream)?;
+            io::copy(&mut body, &mut request)?;
+            let response = request.finish()?;
+            (response.status, Box::new(response.body) as Box<io::Read>)
+        }
+        s => {
+            return Err(Error::UnexpectedScheme(s.to_string()));
+        }
+    };
+
+    if status != HttpStatus::OK {
+        return Err(Error::UnexpectedStatus(status));
+    }
+
+    Ok(body)
+}
+
 /// Execute a GET request.
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn get<U: TryInto<Url>>(url: U) -> Result<HttpBody<std::net::TcpStream>>
+pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
     let url = url
         .try_into()
         .map_err(|e| Error::ParseError(e.to_string()))?;
-    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
-    let response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
-
-    if response.status != HttpStatus::OK {
-        return Err(Error::UnexpectedStatus(response.status));
-    }
-
-    Ok(response.body)
+    let builder = HttpRequestBuilder::get(url.clone())?;
+    Ok(send_request(builder, url, io::empty())?)
 }
 
 /// Execute a PUT request.
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn put<U: TryInto<Url>, R: io::Read>(
-    url: U,
-    mut body: R,
-) -> Result<HttpBody<std::net::TcpStream>>
+pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<Box<io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
     let url = url
         .try_into()
         .map_err(|e| Error::ParseError(e.to_string()))?;
-    let s = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
-    let mut request = HttpRequestBuilder::get(url)?.send(s)?;
-
-    io::copy(&mut body, &mut request)?;
-
-    let response = request.finish()?;
-
-    if response.status != HttpStatus::OK {
-        return Err(Error::UnexpectedStatus(response.status));
-    }
-
-    Ok(response.body)
+    let builder = HttpRequestBuilder::get(url.clone())?;
+    Ok(send_request(builder, url, body)?)
 }
