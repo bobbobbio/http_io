@@ -56,17 +56,17 @@
 //! }
 //!```
 
+use crate::error::{Error, Result};
+use crate::io;
+#[cfg(feature = "std")]
+use crate::protocol::{HttpBody, HttpStatus};
+use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
+use crate::url::Url;
 #[cfg(not(feature = "std"))]
 use alloc::string::ToString;
 use core::convert::TryInto;
 use core::fmt::Display;
 use core::hash::Hash;
-use crate::error::{Error, Result};
-use crate::io;
-use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
-#[cfg(feature = "std")]
-use crate::protocol::{HttpBody, HttpStatus};
-use crate::url::Url;
 use hashbrown::HashMap;
 
 /// A struct for building up an HTTP request.
@@ -197,6 +197,8 @@ impl<S: StreamConnector> HttpClient<S> {
 }
 
 /// Execute a GET request.
+///
+/// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
 pub fn get<U: TryInto<Url>>(url: U) -> Result<HttpBody<std::net::TcpStream>>
 where
@@ -216,6 +218,8 @@ where
 }
 
 /// Execute a PUT request.
+///
+/// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
 pub fn put<U: TryInto<Url>, R: io::Read>(
     url: U,

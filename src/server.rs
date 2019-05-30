@@ -65,11 +65,11 @@
 //!     Ok(())
 //! }
 //! ```
-#[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, string::String};
 use crate::error::Result;
 use crate::io;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
+#[cfg(not(feature = "std"))]
+use alloc::{boxed::Box, string::String};
 
 /// Represents the ability to accept a new abstract connection.
 pub trait Listen {
@@ -126,6 +126,8 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     }
 
     /// Run `serve_one` in a loop forever
+    ///
+    /// *This function is available if http_io is built with the `"std"` feature.*
     #[cfg(feature = "std")]
     pub fn serve_forever(&self) -> ! {
         loop {

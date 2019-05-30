@@ -11,6 +11,7 @@ pub enum Error {
     ParseIntError(num::ParseIntError),
     Utf8Error(str::Utf8Error),
     #[cfg(feature = "std")]
+    /// *This variant is available if http_io is built with the `"std"` feature.*
     IoError(std::io::Error),
     UnexpectedEof(String),
     UnexpectedStatus(HttpStatus),
