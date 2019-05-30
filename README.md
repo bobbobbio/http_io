@@ -5,6 +5,9 @@ Crate containing HTTP client and server.
 - Designed to have limited dependencies, supports `#![no_std]`.
 - Focus on streaming IO.
 - Support for providing your own transport.
+- Supports HTTPS
+
+The no_std build requires nightly since it relies on the alloc crate.
 
 ## Example
 

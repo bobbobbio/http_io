@@ -3,8 +3,8 @@
 //! See the `client` module for HTTP client code.
 //! See the `server` module for HTTP server code.
 //! See the `url` module for code representing urls.
-#![feature(slice_concat_ext)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), feature(slice_concat_ext))]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;

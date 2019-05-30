@@ -104,7 +104,7 @@ impl HttpRequestBuilder {
             .try_into()
             .map_err(|e| Error::ParseError(e.to_string()))?;
         let mut request = HttpRequest::new(method, url.path());
-        request.add_header("Host", &url.authority);
+        request.add_header("Host", url.authority.clone());
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
         Ok(HttpRequestBuilder { request })
