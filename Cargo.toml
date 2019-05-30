@@ -13,5 +13,5 @@ default = ["std", "openssl"]
 std = []
 
 [dependencies]
-hashbrown = "*"
-openssl = { version = "*", optional = true }
+hashbrown = "^0.3"
+openssl = { version = "^0.10", optional = true }
