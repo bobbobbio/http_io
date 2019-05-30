@@ -4,9 +4,14 @@ version = "0.2.3"
 authors = ["Remi Bernotavicius <remi@abort.cc>"]
 edition = "2018"
 license = "MIT/Apache-2.0"
+repository = "https://github.com/bobbobbio/http_io"
+homepage = "https://github.com/bobbobbio/http_io"
 description = """
 A library with limited dependencies containing an HTTP client and server.
 """
+
+[badges]
+travis-ci = { repository = "bobbobbio/http_io" }
 
 [features]
 default = ["std", "openssl"]
