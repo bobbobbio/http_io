@@ -167,99 +167,71 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
 }
 
 #[cfg(test)]
-mod client_server_tests {
-    use super::{HttpRequestHandler, HttpServer, SslListener};
-    use crate::client;
-    use crate::error::Result;
-    use crate::protocol::{HttpBody, HttpResponse, HttpStatus};
+pub struct TestRequestHandler();
+
+#[cfg(test)]
+impl TestRequestHandler {
+    fn new() -> Self {
+        TestRequestHandler()
+    }
+}
+
+#[cfg(test)]
+impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
+    fn get(
+        &self,
+        _uri: String,
+        _stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+        use crate::protocol::{HttpResponse, HttpStatus};
+        Ok(HttpResponse::new(
+            HttpStatus::OK,
+            Box::new("hello from server".as_bytes()),
+        ))
+    }
+    fn put(
+        &self,
+        _uri: String,
+        _stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+        use crate::protocol::{HttpResponse, HttpStatus};
+        Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
+    }
+}
+
+#[cfg(test)]
+pub fn test_server() -> Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
+    let server_socket = std::net::TcpListener::bind("localhost:0")?;
+    let server_address = server_socket.local_addr()?;
+    let handler = TestRequestHandler::new();
+    let server = HttpServer::new(server_socket, handler);
+
+    Ok((server_address.port(), server))
+}
+
+#[cfg(test)]
+pub fn test_ssl_server() -> Result<(
+    u16,
+    HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
+)> {
     use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-    use std::{io, net, path::PathBuf, thread};
 
-    struct TestRequestHandler();
+    let server_socket = std::net::TcpListener::bind("localhost:0")?;
+    let server_address = server_socket.local_addr()?;
+    let handler = TestRequestHandler::new();
 
-    impl TestRequestHandler {
-        fn new() -> Self {
-            TestRequestHandler()
-        }
-    }
+    let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    acceptor
+        .set_private_key_file(manifest_dir.join("test_key.pem"), SslFiletype::PEM)
+        .unwrap();
+    acceptor
+        .set_certificate_chain_file(manifest_dir.join("test_cert.pem"))
+        .unwrap();
+    acceptor.check_private_key().unwrap();
 
-    impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
-        fn get(
-            &self,
-            _uri: String,
-            _stream: HttpBody<&mut I>,
-        ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-            Ok(HttpResponse::new(
-                HttpStatus::OK,
-                Box::new("hello from server".as_bytes()),
-            ))
-        }
-        fn put(
-            &self,
-            _uri: String,
-            _stream: HttpBody<&mut I>,
-        ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-            Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
-        }
-    }
+    let stream = SslListener::new(server_socket, acceptor.build());
+    let server = HttpServer::new(stream, handler);
 
-    fn connected_client_server() -> Result<(u16, HttpServer<net::TcpListener, TestRequestHandler>)>
-    {
-        let server_socket = net::TcpListener::bind("localhost:0")?;
-        let server_address = server_socket.local_addr()?;
-        let handler = TestRequestHandler::new();
-        let server = HttpServer::new(server_socket, handler);
-
-        Ok((server_address.port(), server))
-    }
-
-    #[test]
-    fn get_request() -> Result<()> {
-        let (port, server) = connected_client_server()?;
-        let handle = thread::spawn(move || server.serve_one());
-        let mut body = client::get(format!("http://localhost:{}/", port).as_ref())?;
-        handle.join().unwrap()?;
-
-        let mut body_str = String::new();
-        body.read_to_string(&mut body_str)?;
-        assert_eq!(body_str, "hello from server");
-        Ok(())
-    }
-
-    fn connected_ssl_client_server() -> Result<(
-        u16,
-        HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
-    )> {
-        let server_socket = net::TcpListener::bind("localhost:0")?;
-        let server_address = server_socket.local_addr()?;
-        let handler = TestRequestHandler::new();
-
-        let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        acceptor
-            .set_private_key_file(manifest_dir.join("test_key.pem"), SslFiletype::PEM)
-            .unwrap();
-        acceptor
-            .set_certificate_chain_file(manifest_dir.join("test_cert.pem"))
-            .unwrap();
-        acceptor.check_private_key().unwrap();
-
-        let stream = SslListener::new(server_socket, acceptor.build());
-        let server = HttpServer::new(stream, handler);
-
-        Ok((server_address.port(), server))
-    }
-
-    #[test]
-    fn request_one_ssl() -> Result<()> {
-        let (port, server) = connected_ssl_client_server()?;
-        let handle = thread::spawn(move || server.serve_one());
-        let mut body = client::get(format!("https://localhost:{}/", port).as_ref())?;
-        handle.join().unwrap()?;
-
-        let mut body_str = String::new();
-        body.read_to_string(&mut body_str)?;
-        assert_eq!(body_str, "hello from server");
-        Ok(())
-    }
+    Ok((server_address.port(), server))
 }

@@ -240,6 +240,9 @@ fn send_request<R: io::Read>(
     Ok(body)
 }
 
+#[cfg(test)]
+use crate::server::{test_server, test_ssl_server};
+
 /// Execute a GET request.
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
@@ -253,6 +256,32 @@ where
         .map_err(|e| Error::ParseError(e.to_string()))?;
     let builder = HttpRequestBuilder::get(url.clone())?;
     Ok(send_request(builder, url, io::empty())?)
+}
+
+#[test]
+fn get_request() -> Result<()> {
+    let (port, server) = test_server()?;
+    let handle = std::thread::spawn(move || server.serve_one());
+    let mut body = get(format!("http://localhost:{}/", port).as_ref())?;
+    handle.join().unwrap()?;
+
+    let mut body_str = String::new();
+    body.read_to_string(&mut body_str)?;
+    assert_eq!(body_str, "hello from server");
+    Ok(())
+}
+
+#[test]
+fn get_request_ssl() -> Result<()> {
+    let (port, server) = test_ssl_server()?;
+    let handle = std::thread::spawn(move || server.serve_one());
+    let mut body = get(format!("https://localhost:{}/", port).as_ref())?;
+    handle.join().unwrap()?;
+
+    let mut body_str = String::new();
+    body.read_to_string(&mut body_str)?;
+    assert_eq!(body_str, "hello from server");
+    Ok(())
 }
 
 /// Execute a PUT request.
