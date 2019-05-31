@@ -12,11 +12,6 @@
 //!     // Stream contents of url to stdout
 //!     let mut body = http_io::client::get("http://www.google.com")?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
-//!
-//!     // Stream contents of file to remote server
-//!     let file = File::open("src/client.rs")?;
-//!     http_io::client::put("http://www.google.com", file)?;
-//!     Ok(())
 //! }
 //! ```
 //! # Using the `HttpRequestBuilder` for more control
@@ -295,6 +290,6 @@ where
     let url = url
         .try_into()
         .map_err(|e| Error::ParseError(e.to_string()))?;
-    let builder = HttpRequestBuilder::get(url.clone())?;
+    let builder = HttpRequestBuilder::put(url.clone())?;
     Ok(send_request(builder, url, body)?)
 }
