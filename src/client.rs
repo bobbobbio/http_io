@@ -12,6 +12,7 @@
 //!     // Stream contents of url to stdout
 //!     let mut body = http_io::client::get("http://www.google.com")?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
+//!     Ok(())
 //! }
 //! ```
 //! # Using the `HttpRequestBuilder` for more control
