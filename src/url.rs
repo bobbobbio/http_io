@@ -186,8 +186,8 @@ impl str::FromStr for Path {
     fn from_str(s: &str) -> Result<Self> {
         Ok(Path {
             components: s
-                .split("/")
-                .filter(|s| s.len() > 0)
+                .split('/')
+                .filter(|s| !s.is_empty())
                 .map(percent_decode)
                 .collect::<Result<Vec<_>>>()?,
         })
@@ -234,11 +234,11 @@ impl Url {
             self.query
                 .as_ref()
                 .map(|d| format!("?{}", percent_encode(d)))
-                .unwrap_or("".into()),
+                .unwrap_or_else(|| "".into()),
             self.fragment
                 .as_ref()
                 .map(|d| format!("#{}", percent_encode(d)))
-                .unwrap_or("".into()),
+                .unwrap_or_else(|| "".into()),
         )
     }
 
@@ -270,12 +270,12 @@ impl fmt::Display for Url {
             self.user_information
                 .as_ref()
                 .map(|d| format!("{}@", d))
-                .unwrap_or("".into()),
+                .unwrap_or_else(|| "".into()),
             self.authority,
             self.port
                 .as_ref()
                 .map(|d| format!(":{}", d))
-                .unwrap_or("".into()),
+                .unwrap_or_else(|| "".into()),
             self.path()
         )
     }

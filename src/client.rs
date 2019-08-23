@@ -146,7 +146,7 @@ impl StreamConnector for std::net::TcpStream {
             std::net::ToSocketAddrs::to_socket_addrs(&(url.authority.as_ref(), url.port()?))
                 .map_err(|_| err())?
                 .next()
-                .ok_or(err())?,
+                .ok_or_else(err)?,
         )
     }
 }
@@ -158,8 +158,9 @@ pub struct HttpClient<S: StreamConnector> {
 
 impl<S: StreamConnector> HttpClient<S> {
     /// Create an `HTTPClient`
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        HttpClient {
+        Self {
             streams: HashMap::new(),
         }
     }
@@ -201,7 +202,7 @@ fn send_request<R: io::Read>(
     builder: HttpRequestBuilder,
     url: Url,
     mut body: R,
-) -> Result<Box<io::Read>> {
+) -> Result<Box<dyn io::Read>> {
     let stream = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
     let (status, body) = match &url.scheme {
         #[cfg(feature = "openssl")]
@@ -216,13 +217,19 @@ fn send_request<R: io::Read>(
             let mut request = builder.send(stream)?;
             io::copy(&mut body, &mut request)?;
             let response = request.finish()?;
-            (response.status, Box::new(response.body) as Box<io::Read>)
+            (
+                response.status,
+                Box::new(response.body) as Box<dyn io::Read>,
+            )
         }
         Scheme::Http => {
             let mut request = builder.send(stream)?;
             io::copy(&mut body, &mut request)?;
             let response = request.finish()?;
-            (response.status, Box::new(response.body) as Box<io::Read>)
+            (
+                response.status,
+                Box::new(response.body) as Box<dyn io::Read>,
+            )
         }
         s => {
             return Err(Error::UnexpectedScheme(s.to_string()));
@@ -243,7 +250,7 @@ use crate::server::{test_server, test_ssl_server};
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<io::Read>>
+pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<dyn io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
@@ -284,7 +291,7 @@ fn get_request_ssl() -> Result<()> {
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<Box<io::Read>>
+pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<Box<dyn io::Read>>
 where
     <U as TryInto<Url>>::Error: Display,
 {

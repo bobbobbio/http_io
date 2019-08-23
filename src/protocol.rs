@@ -1,5 +1,8 @@
 //! Types representing various parts of the HTTP protocol.
 
+// We do write! + '\r\n' and don't want to hide the line ending in a writeln!
+#![allow(clippy::write_with_newline)]
+
 use crate::error::{Error, Result};
 use crate::io::{self, Read, Write};
 #[cfg(not(feature = "std"))]
@@ -62,7 +65,7 @@ impl<S: io::Read> io::Read for HttpChunkedBody<S> {
             if read == 0 {
                 let mut stream = chunk.into_inner();
                 let mut b = [0; 2];
-                stream.read(&mut b)?;
+                stream.read_exact(&mut b)?;
                 self.stream = Some(stream);
                 self.read(buffer)
             } else {
@@ -168,7 +171,7 @@ impl<W: io::Read> Iterator for CrLfStream<W> {
     fn next(&mut self) -> Option<Result<String>> {
         match self.inner_next() {
             Err(e) => Some(Err(e)),
-            Ok(v) => v.map(|i| Ok(i)),
+            Ok(v) => v.map(Ok),
         }
     }
 }
@@ -184,7 +187,7 @@ impl<W: io::Read> CrLfStream<W> {
                 && line[line.len() - 1] as char == '\n'
             {
                 let before = &line[..(line.len() - 2)];
-                if before.len() == 0 {
+                if before.is_empty() {
                     return Ok(None);
                 } else {
                     return Ok(Some(str::from_utf8(before)?.into()));
@@ -196,7 +199,7 @@ impl<W: io::Read> CrLfStream<W> {
 
     pub fn expect_next(&mut self) -> Result<String> {
         self.inner_next()?
-            .ok_or(Error::UnexpectedEof("Expected line".into()))
+            .ok_or_else(|| Error::UnexpectedEof("Expected line".into()))
     }
 }
 
@@ -269,10 +272,10 @@ impl<'a> Parser<'a> {
 
     pub fn parse_char(&mut self) -> Result<char> {
         if self.position >= self.s.len() {
-            return Err(Error::UnexpectedEof(format!("Expected char")));
+            return Err(Error::UnexpectedEof("Expected char".into()));
         }
 
-        let c = self.s[self.position..(self.position + 1)]
+        let c = self.s[self.position..=self.position]
             .chars()
             .next()
             .unwrap();
@@ -282,10 +285,10 @@ impl<'a> Parser<'a> {
 
     pub fn parse_digit(&mut self) -> Result<u32> {
         if self.position >= self.s.len() {
-            return Err(Error::UnexpectedEof(format!("Expected digit")));
+            return Err(Error::UnexpectedEof("Expected digit".into()));
         }
 
-        let digit = &self.s[self.position..(self.position + 1)];
+        let digit = &self.s[self.position..=self.position];
         self.position += 1;
         Ok(digit.parse()?)
     }
@@ -296,10 +299,9 @@ impl<'a> Parser<'a> {
         }
 
         let remaining = &self.s[self.position..];
-        let pos = remaining.find(div).ok_or(Error::ParseError(format!(
-            "Expected '{}' in '{}'",
-            div, remaining
-        )))?;
+        let pos = remaining
+            .find(div)
+            .ok_or_else(|| Error::ParseError(format!("Expected '{}' in '{}'", div, remaining)))?;
         self.position += pos;
         Ok(&remaining[..pos])
     }
@@ -310,20 +312,17 @@ impl<'a> Parser<'a> {
         }
 
         let remaining = &self.s[self.position..];
-        let pos = remaining
-            .find(|c| divs.contains(&c))
-            .ok_or(Error::ParseError(format!(
-                "Expected '{:?}' in '{}'",
-                divs, remaining
-            )))?;
+        let pos = remaining.find(|c| divs.contains(&c)).ok_or_else(|| {
+            Error::ParseError(format!("Expected '{:?}' in '{}'", divs, remaining))
+        })?;
         self.position += pos;
         Ok(&remaining[..pos])
     }
 
     pub fn consume_whilespace(&mut self) {
         while self.position < self.s.len()
-            && (self.s[self.position..].starts_with(" ")
-                || self.s[self.position..].starts_with("\t"))
+            && (self.s[self.position..].starts_with(' ')
+                || self.s[self.position..].starts_with('\t'))
         {
             self.position += 1
         }
@@ -694,7 +693,7 @@ impl HttpHeaders {
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.headers.get(key.into()).map(convert::AsRef::as_ref)
+        self.headers.get(key).map(convert::AsRef::as_ref)
     }
 
     pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
@@ -707,7 +706,7 @@ impl HttpHeaders {
         while let Some(line) = iter.next() {
             let mut line = line?;
             while let Some(Ok(next_line)) = iter.peek() {
-                if !next_line.starts_with(" ") && !next_line.starts_with("\t") {
+                if !next_line.starts_with(' ') && !next_line.starts_with('\t') {
                     break;
                 }
                 line.push_str(&iter.next().unwrap()?);

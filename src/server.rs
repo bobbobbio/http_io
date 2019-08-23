@@ -158,9 +158,8 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     #[cfg(feature = "std")]
     pub fn serve_forever(&self) -> ! {
         loop {
-            match self.serve_one() {
-                Err(e) => println!("Error {:?}", e),
-                _ => {}
+            if let Err(e) = self.serve_one() {
+                println!("Error {:?}", e)
             }
         }
     }
@@ -183,7 +182,7 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         _uri: String,
         _stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-        use crate::protocol::{HttpResponse, HttpStatus};
+        use crate::protocol::HttpStatus;
         Ok(HttpResponse::new(
             HttpStatus::OK,
             Box::new("hello from server".as_bytes()),
@@ -194,7 +193,7 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         _uri: String,
         _stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-        use crate::protocol::{HttpResponse, HttpStatus};
+        use crate::protocol::HttpStatus;
         Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
     }
 }
