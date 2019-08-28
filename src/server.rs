@@ -26,7 +26,7 @@
 //!
 //! impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
 //!     fn get(
-//!         &self,
+//!         &mut self,
 //!         uri: String,
 //!         _stream: HttpBody<&mut I>,
 //!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
@@ -38,7 +38,7 @@
 //!     }
 //!
 //!     fn put(
-//!         &self,
+//!         &mut self,
 //!         uri: String,
 //!         mut stream: HttpBody<&mut I>,
 //!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
@@ -54,7 +54,7 @@
 //!     let port = socket.local_addr()?.port();
 //!     let handle: thread::JoinHandle<Result<()>> = thread::spawn(move || {
 //!         let handler = FileHandler::new(std::env::current_dir()?);
-//!         let server = HttpServer::new(socket, handler);
+//!         let mut server = HttpServer::new(socket, handler);
 //!         server.serve_one()?;
 //!         Ok(())
 //!     });
@@ -115,10 +115,16 @@ where
 
 /// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
-    fn get(&self, uri: String, stream: HttpBody<&mut I>)
-        -> Result<HttpResponse<Box<dyn io::Read>>>;
-    fn put(&self, uri: String, stream: HttpBody<&mut I>)
-        -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn get(
+        &mut self,
+        uri: String,
+        stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn put(
+        &mut self,
+        uri: String,
+        stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>>;
 }
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
@@ -137,7 +143,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     }
 
     /// Accept one new HTTP stream and serve one request off it.
-    pub fn serve_one(&self) -> Result<()> {
+    pub fn serve_one(&mut self) -> Result<()> {
         let mut stream = self.connection_stream.accept()?;
         let request = HttpRequest::deserialize(io::BufReader::new(&mut stream))?;
 
@@ -156,7 +162,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     ///
     /// *This function is available if http_io is built with the `"std"` feature.*
     #[cfg(feature = "std")]
-    pub fn serve_forever(&self) -> ! {
+    pub fn serve_forever(&mut self) -> ! {
         loop {
             if let Err(e) = self.serve_one() {
                 println!("Error {:?}", e)
@@ -166,50 +172,90 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
 }
 
 #[cfg(test)]
-pub struct TestRequestHandler();
+use crate::protocol::HttpStatus;
+
+#[cfg(test)]
+#[derive(PartialEq, Debug)]
+pub struct ExpectedRequest {
+    pub expected_method: HttpMethod,
+    pub expected_uri: String,
+
+    pub response_status: HttpStatus,
+    pub response_body: String,
+}
+
+#[cfg(test)]
+pub struct TestRequestHandler {
+    script: Vec<ExpectedRequest>,
+}
 
 #[cfg(test)]
 impl TestRequestHandler {
-    fn new() -> Self {
-        TestRequestHandler()
+    fn new(script: Vec<ExpectedRequest>) -> Self {
+        Self { script }
     }
 }
 
 #[cfg(test)]
 impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
     fn get(
-        &self,
-        _uri: String,
+        &mut self,
+        uri: String,
         _stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-        use crate::protocol::HttpStatus;
+        let request = self.script.remove(0);
+        assert_eq!(request.expected_method, HttpMethod::Get);
+        assert_eq!(request.expected_uri, uri);
+
         Ok(HttpResponse::new(
-            HttpStatus::OK,
-            Box::new("hello from server".as_bytes()),
+            request.response_status,
+            Box::new(io::Cursor::new(
+                request.response_body.into_boxed_str().into_boxed_bytes(),
+            )),
         ))
     }
+
     fn put(
-        &self,
-        _uri: String,
+        &mut self,
+        uri: String,
         _stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
-        use crate::protocol::HttpStatus;
-        Ok(HttpResponse::new(HttpStatus::OK, Box::new(io::empty())))
+        let request = self.script.remove(0);
+        assert_eq!(request.expected_method, HttpMethod::Put);
+        assert_eq!(request.expected_uri, uri);
+
+        Ok(HttpResponse::new(
+            request.response_status,
+            Box::new(io::Cursor::new(
+                request.response_body.into_boxed_str().into_boxed_bytes(),
+            )),
+        ))
     }
 }
 
 #[cfg(test)]
-pub fn test_server() -> Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
+impl Drop for TestRequestHandler {
+    fn drop(&mut self) {
+        assert_eq!(&self.script, &vec![]);
+    }
+}
+
+#[cfg(test)]
+pub fn test_server(
+    script: Vec<ExpectedRequest>,
+) -> Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
     let server_socket = std::net::TcpListener::bind("localhost:0")?;
     let server_address = server_socket.local_addr()?;
-    let handler = TestRequestHandler::new();
+    let handler = TestRequestHandler::new(script);
     let server = HttpServer::new(server_socket, handler);
 
     Ok((server_address.port(), server))
 }
 
 #[cfg(test)]
-pub fn test_ssl_server() -> Result<(
+pub fn test_ssl_server(
+    script: Vec<ExpectedRequest>,
+) -> Result<(
     u16,
     HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
 )> {
@@ -217,7 +263,7 @@ pub fn test_ssl_server() -> Result<(
 
     let server_socket = std::net::TcpListener::bind("localhost:0")?;
     let server_address = server_socket.local_addr()?;
-    let handler = TestRequestHandler::new();
+    let handler = TestRequestHandler::new(script);
 
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));

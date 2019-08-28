@@ -244,7 +244,7 @@ fn send_request<R: io::Read>(
 }
 
 #[cfg(test)]
-use crate::server::{test_server, test_ssl_server};
+use crate::server::{test_server, test_ssl_server, ExpectedRequest};
 
 /// Execute a GET request.
 ///
@@ -263,7 +263,12 @@ where
 
 #[test]
 fn get_request() -> Result<()> {
-    let (port, server) = test_server()?;
+    let (port, mut server) = test_server(vec![ExpectedRequest {
+        expected_method: HttpMethod::Get,
+        expected_uri: "/".into(),
+        response_status: HttpStatus::OK,
+        response_body: "hello from server".into(),
+    }])?;
     let handle = std::thread::spawn(move || server.serve_one());
     let mut body = get(format!("http://localhost:{}/", port).as_ref())?;
     handle.join().unwrap()?;
@@ -276,7 +281,12 @@ fn get_request() -> Result<()> {
 
 #[test]
 fn get_request_ssl() -> Result<()> {
-    let (port, server) = test_ssl_server()?;
+    let (port, mut server) = test_ssl_server(vec![ExpectedRequest {
+        expected_method: HttpMethod::Get,
+        expected_uri: "/".into(),
+        response_status: HttpStatus::OK,
+        response_body: "hello from server".into(),
+    }])?;
     let handle = std::thread::spawn(move || server.serve_one());
     let mut body = get(format!("https://localhost:{}/", port).as_ref())?;
     handle.join().unwrap()?;

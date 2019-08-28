@@ -20,7 +20,7 @@ impl FileHandler {
 
 impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
     fn get(
-        &self,
+        &mut self,
         uri: String,
         _stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
@@ -64,7 +64,7 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
     }
 
     fn put(
-        &self,
+        &mut self,
         uri: String,
         mut stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
@@ -79,7 +79,7 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
 fn main() -> Result<()> {
     let handler = FileHandler::new(std::env::current_dir()?);
     let socket = net::TcpListener::bind("127.0.0.1:8080")?;
-    let server = HttpServer::new(socket, handler);
+    let mut server = HttpServer::new(socket, handler);
     println!("Server started on port 8080");
     server.serve_forever();
 }
