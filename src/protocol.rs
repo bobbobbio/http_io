@@ -152,6 +152,14 @@ impl<S: io::Read> HttpBody<S> {
             HttpBody::ReadTilClose(body)
         }
     }
+
+    pub fn has_length(&self) -> bool {
+        match self {
+            HttpBody::Chunked(_) => false,
+            HttpBody::Limited(_) => false,
+            HttpBody::ReadTilClose(_) => true,
+        }
+    }
 }
 
 pub struct CrLfStream<W> {
@@ -930,7 +938,13 @@ pub struct OutgoingBody<S: io::Read + io::Write> {
 
 impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.socket.write(buf)
+        let len = buf.len();
+        if len == 0 {
+            return Ok(0);
+        }
+        write!(&mut self.socket, "{:x}\r\n", len)?;
+        self.socket.write_all(buf)?;
+        Ok(len)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -943,7 +957,9 @@ impl<S: io::Read + io::Write> OutgoingBody<S> {
         OutgoingBody { socket }
     }
 
-    pub fn finish(self) -> Result<HttpResponse<S>> {
+    pub fn finish(mut self) -> Result<HttpResponse<S>> {
+        write!(&mut self.socket, "0\r\n\r\n")?;
+
         let socket = self.socket.into_inner()?;
         Ok(HttpResponse::deserialize(socket)?)
     }

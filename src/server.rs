@@ -28,7 +28,6 @@
 //!     fn get(
 //!         &mut self,
 //!         uri: String,
-//!         _stream: HttpBody<&mut I>,
 //!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
 //!         let path = self.file_root.join(uri.trim_start_matches("/"));
 //!         Ok(HttpResponse::new(
@@ -67,7 +66,7 @@
 //!     Ok(())
 //! }
 //! ```
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::io;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
 #[cfg(not(feature = "std"))]
@@ -115,11 +114,7 @@ where
 
 /// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
-    fn get(
-        &mut self,
-        uri: String,
-        stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>>;
     fn put(
         &mut self,
         uri: String,
@@ -148,8 +143,13 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         let request = HttpRequest::deserialize(io::BufReader::new(&mut stream))?;
 
         let mut response = match request.method {
-            HttpMethod::Get => self.request_handler.get(request.uri, request.body)?,
-            HttpMethod::Put => self.request_handler.put(request.uri, request.body)?,
+            HttpMethod::Get => self.request_handler.get(request.uri)?,
+            HttpMethod::Put => {
+                if !request.body.has_length() {
+                    return Err(Error::Other("Length Required".into()));
+                }
+                self.request_handler.put(request.uri, request.body)?
+            }
         };
 
         response.serialize(&mut stream)?;
@@ -198,11 +198,7 @@ impl TestRequestHandler {
 
 #[cfg(test)]
 impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
-    fn get(
-        &mut self,
-        uri: String,
-        _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Get);
         assert_eq!(request.expected_uri, uri);

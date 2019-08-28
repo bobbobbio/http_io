@@ -103,6 +103,7 @@ impl HttpRequestBuilder {
         request.add_header("Host", url.authority.clone());
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
+        request.add_header("Transfer-Encoding", "chunked");
         Ok(HttpRequestBuilder { request })
     }
 
