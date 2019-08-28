@@ -8,7 +8,7 @@
 //! use std::path::PathBuf;
 //! use std::thread;
 //!
-//! use http_io::error::Result;
+//! use http_io::error::{Error, Result};
 //! use http_io::protocol::{HttpBody, HttpResponse, HttpStatus};
 //! use http_io::server::{HttpRequestHandler, HttpServer};
 //!
@@ -25,6 +25,7 @@
 //! }
 //!
 //! impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
+//!     type Error = Error;
 //!     fn get(
 //!         &mut self,
 //!         uri: String,
@@ -66,22 +67,30 @@
 //!     Ok(())
 //! }
 //! ```
-use crate::error::{Error, Result};
 use crate::io;
-use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse};
+use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, string::String};
+use std::result::Result;
+
+type HttpResult<T> = std::result::Result<T, HttpResponse<Box<dyn io::Read>>>;
+
+impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
+    fn from(error: crate::error::Error) -> Self {
+        HttpResponse::from_string(HttpStatus::InternalServerError, error.to_string())
+    }
+}
 
 /// Represents the ability to accept a new abstract connection.
 pub trait Listen {
     type stream: io::Read + io::Write;
-    fn accept(&self) -> Result<Self::stream>;
+    fn accept(&self) -> crate::error::Result<Self::stream>;
 }
 
 #[cfg(feature = "std")]
 impl Listen for std::net::TcpListener {
     type stream = std::net::TcpStream;
-    fn accept(&self) -> Result<std::net::TcpStream> {
+    fn accept(&self) -> crate::error::Result<std::net::TcpStream> {
         let (stream, _) = std::net::TcpListener::accept(self)?;
         Ok(stream)
     }
@@ -106,7 +115,7 @@ where
     <L as Listen>::stream: std::fmt::Debug,
 {
     type stream = openssl::ssl::SslStream<<L as Listen>::stream>;
-    fn accept(&self) -> Result<Self::stream> {
+    fn accept(&self) -> crate::error::Result<Self::stream> {
         let stream = self.listener.accept()?;
         Ok(self.acceptor.accept(stream)?)
     }
@@ -114,12 +123,13 @@ where
 
 /// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
-    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    type Error: Into<HttpResponse<Box<dyn io::Read>>>;
+    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error>;
     fn put(
         &mut self,
         uri: String,
         stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>>;
+    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error>;
 }
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
@@ -137,25 +147,39 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         }
     }
 
-    /// Accept one new HTTP stream and serve one request off it.
-    pub fn serve_one(&mut self) -> Result<()> {
+    pub fn serve_one(&mut self) -> io::Result<()> {
         let mut stream = self.connection_stream.accept()?;
-        let request = HttpRequest::deserialize(io::BufReader::new(&mut stream))?;
-
-        let mut response = match request.method {
-            HttpMethod::Get => self.request_handler.get(request.uri)?,
-            HttpMethod::Put => {
-                if !request.body.has_length() {
-                    return Err(Error::Other("Length Required".into()));
-                }
-                self.request_handler.put(request.uri, request.body)?
-            }
+        let mut response = match self.serve_one_inner(&mut stream) {
+            Ok(response) => response,
+            Err(response) => response,
         };
 
         response.serialize(&mut stream)?;
         io::copy(&mut response.body, &mut stream)?;
 
         Ok(())
+    }
+
+    /// Accept one new HTTP stream and serve one request off it.
+    pub fn serve_one_inner(
+        &mut self,
+        stream: &mut <L as Listen>::stream,
+    ) -> HttpResult<HttpResponse<Box<dyn io::Read>>> {
+        let request = HttpRequest::deserialize(io::BufReader::new(stream))?;
+
+        match request.method {
+            HttpMethod::Get => self.request_handler.get(request.uri),
+            HttpMethod::Put => {
+                if !request.body.has_length() {
+                    return Err(HttpResponse::from_string(
+                        HttpStatus::LengthRequired,
+                        "length required",
+                    ));
+                }
+                self.request_handler.put(request.uri, request.body)
+            }
+        }
+        .map_err(|e| e.into())
     }
 
     /// Run `serve_one` in a loop forever
@@ -170,9 +194,6 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         }
     }
 }
-
-#[cfg(test)]
-use crate::protocol::HttpStatus;
 
 #[cfg(test)]
 #[derive(PartialEq, Debug)]
@@ -198,16 +219,16 @@ impl TestRequestHandler {
 
 #[cfg(test)]
 impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
-    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>> {
+    type Error = HttpResponse<Box<dyn io::Read>>;
+
+    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Get);
         assert_eq!(request.expected_uri, uri);
 
-        Ok(HttpResponse::new(
+        Ok(HttpResponse::from_string(
             request.response_status,
-            Box::new(io::Cursor::new(
-                request.response_body.into_boxed_str().into_boxed_bytes(),
-            )),
+            request.response_body,
         ))
     }
 
@@ -215,16 +236,14 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         &mut self,
         uri: String,
         _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Put);
         assert_eq!(request.expected_uri, uri);
 
-        Ok(HttpResponse::new(
+        Ok(HttpResponse::from_string(
             request.response_status,
-            Box::new(io::Cursor::new(
-                request.response_body.into_boxed_str().into_boxed_bytes(),
-            )),
+            request.response_body,
         ))
     }
 }
@@ -239,7 +258,7 @@ impl Drop for TestRequestHandler {
 #[cfg(test)]
 pub fn test_server(
     script: Vec<ExpectedRequest>,
-) -> Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
+) -> crate::error::Result<(u16, HttpServer<std::net::TcpListener, TestRequestHandler>)> {
     let server_socket = std::net::TcpListener::bind("localhost:0")?;
     let server_address = server_socket.local_addr()?;
     let handler = TestRequestHandler::new(script);
@@ -251,7 +270,7 @@ pub fn test_server(
 #[cfg(test)]
 pub fn test_ssl_server(
     script: Vec<ExpectedRequest>,
-) -> Result<(
+) -> crate::error::Result<(
     u16,
     HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
 )> {

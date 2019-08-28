@@ -560,6 +560,8 @@ mod http_version_tests {
 pub enum HttpStatus {
     MovedPermanently,
     OK,
+    LengthRequired,
+    InternalServerError,
     Unknown(u32),
 }
 
@@ -571,6 +573,8 @@ impl str::FromStr for HttpStatus {
         match parser.parse_number()? {
             301 => Ok(HttpStatus::MovedPermanently),
             200 => Ok(HttpStatus::OK),
+            411 => Ok(HttpStatus::LengthRequired),
+            500 => Ok(HttpStatus::InternalServerError),
             v => Ok(HttpStatus::Unknown(v)),
         }
     }
@@ -581,6 +585,8 @@ impl fmt::Display for HttpStatus {
         match self {
             HttpStatus::OK => write!(f, "200 OK"),
             HttpStatus::MovedPermanently => write!(f, "301 Moved Permanently"),
+            HttpStatus::LengthRequired => write!(f, "411 Length Required"),
+            HttpStatus::InternalServerError => write!(f, "500 Internal Server Error"),
             HttpStatus::Unknown(v) => write!(f, "{}", v),
         }
     }
@@ -600,6 +606,14 @@ mod http_status_tests {
         assert_eq!(
             "301".parse::<HttpStatus>().unwrap(),
             HttpStatus::MovedPermanently
+        );
+        assert_eq!(
+            "411".parse::<HttpStatus>().unwrap(),
+            HttpStatus::LengthRequired
+        );
+        assert_eq!(
+            "500".parse::<HttpStatus>().unwrap(),
+            HttpStatus::InternalServerError
         );
         assert_eq!("200 OK".parse::<HttpStatus>().unwrap(), HttpStatus::OK);
         assert_eq!("200".parse::<HttpStatus>().unwrap(), HttpStatus::OK);
@@ -622,6 +636,14 @@ mod http_status_tests {
             "301 Moved Permanently"
         );
         assert_eq!(&HttpStatus::OK.to_string(), "200 OK");
+        assert_eq!(
+            &HttpStatus::LengthRequired.to_string(),
+            "411 Length Required"
+        );
+        assert_eq!(
+            &HttpStatus::InternalServerError.to_string(),
+            "500 Internal Server Error"
+        );
         assert_eq!(&HttpStatus::Unknown(899).to_string(), "899");
     }
 
@@ -787,6 +809,12 @@ pub struct HttpResponse<B: io::Read> {
     pub status: HttpStatus,
     pub headers: HttpHeaders,
     pub body: HttpBody<B>,
+}
+
+impl HttpResponse<Box<dyn io::Read>> {
+    pub fn from_string<S: Into<String>>(status: HttpStatus, s: S) -> Self {
+        HttpResponse::new(status, Box::new(io::Cursor::new(s.into())))
+    }
 }
 
 impl<B: io::Read> HttpResponse<B> {

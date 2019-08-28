@@ -2,7 +2,7 @@ use std::io;
 use std::net;
 use std::path::PathBuf;
 
-use http_io::error::Result;
+use http_io::error::{Error, Result};
 use http_io::protocol::{HttpBody, HttpResponse, HttpStatus};
 use http_io::server::{HttpRequestHandler, HttpServer};
 
@@ -19,6 +19,8 @@ impl FileHandler {
 }
 
 impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
+    type Error = Error;
+
     fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>> {
         let path = self.file_root.join(uri.trim_start_matches("/"));
         println!("Request for {:?}", path);
