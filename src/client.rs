@@ -245,7 +245,9 @@ fn send_request<R: io::Read>(
 }
 
 #[cfg(test)]
-use crate::server::{test_server, test_ssl_server, ExpectedRequest};
+use crate::server::{
+    test_server, test_ssl_server, ExpectedRequest, HttpRequestHandler, HttpServer, Listen,
+};
 
 /// Execute a GET request.
 ///
@@ -262,16 +264,23 @@ where
     Ok(send_request(builder, url, io::empty())?)
 }
 
-#[test]
-fn get_request() -> Result<()> {
-    let (port, mut server) = test_server(vec![ExpectedRequest {
+#[cfg(test)]
+fn get_test<
+    L: Listen + Send + 'static,
+    T: HttpRequestHandler<L::stream> + Send + 'static,
+    F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+>(
+    scheme: Scheme,
+    server_factor: F,
+) -> Result<()> {
+    let (port, mut server) = server_factor(vec![ExpectedRequest {
         expected_method: HttpMethod::Get,
         expected_uri: "/".into(),
         response_status: HttpStatus::OK,
         response_body: "hello from server".into(),
     }])?;
     let handle = std::thread::spawn(move || server.serve_one());
-    let mut body = get(format!("http://localhost:{}/", port).as_ref())?;
+    let mut body = get(format!("{}://localhost:{}/", scheme, port).as_ref())?;
     handle.join().unwrap()?;
 
     let mut body_str = String::new();
@@ -281,21 +290,13 @@ fn get_request() -> Result<()> {
 }
 
 #[test]
-fn get_request_ssl() -> Result<()> {
-    let (port, mut server) = test_ssl_server(vec![ExpectedRequest {
-        expected_method: HttpMethod::Get,
-        expected_uri: "/".into(),
-        response_status: HttpStatus::OK,
-        response_body: "hello from server".into(),
-    }])?;
-    let handle = std::thread::spawn(move || server.serve_one());
-    let mut body = get(format!("https://localhost:{}/", port).as_ref())?;
-    handle.join().unwrap()?;
+fn get_request() -> Result<()> {
+    get_test(Scheme::Http, test_server)
+}
 
-    let mut body_str = String::new();
-    body.read_to_string(&mut body_str)?;
-    assert_eq!(body_str, "hello from server");
-    Ok(())
+#[test]
+fn get_request_ssl() -> Result<()> {
+    get_test(Scheme::Https, test_ssl_server)
 }
 
 /// Execute a PUT request.
