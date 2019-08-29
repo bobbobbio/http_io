@@ -20,3 +20,6 @@ std = []
 [dependencies]
 hashbrown = "^0.3"
 openssl = { version = "^0.10", optional = true }
+
+[dev-dependencies]
+structopt = "*"
