@@ -1,6 +1,7 @@
 //! This module provides re-implementations of things from std::io for building without std
 
 pub use crate::error::{Error, Result};
+use core::cmp;
 
 pub trait Read {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
@@ -18,6 +19,24 @@ pub trait Read {
         Self: Sized,
     {
         Bytes { inner: self }
+    }
+
+    fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+        while !buf.is_empty() {
+            match self.read(buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let tmp = buf;
+                    buf = &mut tmp[n..];
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        if !buf.is_empty() {
+            Err(Error::UnexpectedEof("failed to fill whole buffer".into()))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -154,12 +173,7 @@ where
     R: Read,
     W: Write,
 {
-    let mut buf = unsafe {
-        let mut buf: [u8; DEFAULT_BUF_SIZE] = core::mem::uninitialized();
-        core::ptr::write_bytes(buf.as_mut_ptr(), 0, buf.len());
-        buf
-    };
-
+    let mut buf = [0u8; DEFAULT_BUF_SIZE];
     let mut written = 0;
     loop {
         let len = match reader.read(&mut buf) {
@@ -225,4 +239,68 @@ impl<R: Read> core::iter::Iterator for Bytes<R> {
 
 pub fn empty() -> Empty {
     Empty {}
+}
+
+pub struct Cursor<T> {
+    inner: T,
+    pos: u64,
+}
+
+impl<T> Cursor<T> {
+    pub fn new(inner: T) -> Self {
+        Self { pos: 0, inner }
+    }
+}
+
+impl<T> Cursor<T>
+where
+    T: AsRef<[u8]>,
+{
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        let amt = cmp::min(self.pos, self.inner.as_ref().len() as u64);
+        Ok(&self.inner.as_ref()[(amt as usize)..])
+    }
+}
+
+impl<T> Read for Cursor<T>
+where
+    T: AsRef<[u8]>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let n = Read::read(&mut self.fill_buf()?, buf)?;
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl Read for &[u8] {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let amt = cmp::min(buf.len(), self.len());
+        let (a, b) = self.split_at(amt);
+
+        if amt == 1 {
+            buf[0] = a[0];
+        } else {
+            buf[..amt].copy_from_slice(a);
+        }
+
+        *self = b;
+        Ok(amt)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+        if buf.len() > self.len() {
+            return Err(Error::UnexpectedEof("failed to fill whole buffer".into()));
+        }
+        let (a, b) = self.split_at(buf.len());
+
+        if buf.len() == 1 {
+            buf[0] = a[0];
+        } else {
+            buf.copy_from_slice(a);
+        }
+
+        *self = b;
+        Ok(())
+    }
 }

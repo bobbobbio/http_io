@@ -70,10 +70,13 @@
 use crate::io;
 use crate::protocol::{HttpBody, HttpMethod, HttpRequest, HttpResponse, HttpStatus};
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, string::String};
-use std::result::Result;
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+};
+use core::result::Result;
 
-type HttpResult<T> = std::result::Result<T, HttpResponse<Box<dyn io::Read>>>;
+type HttpResult<T> = core::result::Result<T, HttpResponse<Box<dyn io::Read>>>;
 
 impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
     fn from(error: crate::error::Error) -> Self {

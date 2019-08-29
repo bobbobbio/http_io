@@ -18,7 +18,6 @@ use crate::protocol::Parser;
 #[cfg(not(feature = "std"))]
 use alloc::{
     format,
-    slice::SliceConcatExt,
     string::{String, ToString},
     vec,
     vec::Vec,

@@ -6,7 +6,7 @@
 use crate::error::{Error, Result};
 use crate::io::{self, Read, Write};
 #[cfg(not(feature = "std"))]
-use alloc::{collections::BTreeMap, format, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec, vec::Vec};
 use core::cmp;
 use core::convert;
 use core::fmt;
