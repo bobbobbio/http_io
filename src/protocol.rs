@@ -156,11 +156,17 @@ impl<S: io::Read> HttpBody<S> {
         }
     }
 
-    pub fn has_length(&self) -> bool {
-        match self {
+    pub fn require_length(&self) -> Result<()> {
+        let has_length = match self {
             HttpBody::Chunked(_) => true,
             HttpBody::Limited(_) => true,
             HttpBody::ReadTilClose(_) => false,
+        };
+
+        if !has_length {
+            Err(Error::LengthRequired)
+        } else {
+            Ok(())
         }
     }
 }
@@ -926,6 +932,7 @@ mod http_response_tests {
 pub enum HttpMethod {
     Get,
     Head,
+    Post,
     Put,
 }
 
@@ -935,6 +942,7 @@ impl str::FromStr for HttpMethod {
         match s.to_uppercase().as_ref() {
             "GET" => Ok(HttpMethod::Get),
             "HEAD" => Ok(HttpMethod::Head),
+            "POST" => Ok(HttpMethod::Post),
             "PUT" => Ok(HttpMethod::Put),
             m => Err(Error::ParseError(format!("Unknown method {}", m))),
         }
@@ -946,6 +954,7 @@ impl fmt::Display for HttpMethod {
         match self {
             HttpMethod::Get => write!(f, "GET"),
             HttpMethod::Head => write!(f, "HEAD"),
+            HttpMethod::Post => write!(f, "POST"),
             HttpMethod::Put => write!(f, "PUT"),
         }
     }
@@ -960,6 +969,7 @@ mod http_method_tests {
     fn parse_success() {
         assert_eq!("GET".parse::<HttpMethod>().unwrap(), HttpMethod::Get);
         assert_eq!("HEAD".parse::<HttpMethod>().unwrap(), HttpMethod::Head);
+        assert_eq!("POST".parse::<HttpMethod>().unwrap(), HttpMethod::Post);
         assert_eq!("PUT".parse::<HttpMethod>().unwrap(), HttpMethod::Put);
     }
 
@@ -973,6 +983,7 @@ mod http_method_tests {
     fn display() {
         assert_eq!(&HttpMethod::Get.to_string(), "GET");
         assert_eq!(&HttpMethod::Head.to_string(), "HEAD");
+        assert_eq!(&HttpMethod::Post.to_string(), "POST");
         assert_eq!(&HttpMethod::Put.to_string(), "PUT");
     }
 
@@ -980,6 +991,7 @@ mod http_method_tests {
     fn parse_display_round_trip() {
         assert_eq!(&"GET".parse::<HttpMethod>().unwrap().to_string(), "GET");
         assert_eq!(&"HEAD".parse::<HttpMethod>().unwrap().to_string(), "HEAD");
+        assert_eq!(&"POST".parse::<HttpMethod>().unwrap().to_string(), "POST");
         assert_eq!(&"PUT".parse::<HttpMethod>().unwrap().to_string(), "PUT");
     }
 }

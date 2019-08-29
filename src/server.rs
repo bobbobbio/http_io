@@ -80,7 +80,12 @@ type HttpResult<T> = core::result::Result<T, HttpResponse<Box<dyn io::Read>>>;
 
 impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
     fn from(error: crate::error::Error) -> Self {
-        HttpResponse::from_string(HttpStatus::InternalServerError, error.to_string())
+        match error {
+            crate::error::Error::LengthRequired => {
+                HttpResponse::from_string(HttpStatus::LengthRequired, "length required")
+            }
+            e => HttpResponse::from_string(HttpStatus::InternalServerError, e.to_string()),
+        }
     }
 }
 
@@ -152,6 +157,17 @@ pub trait HttpRequestHandler<I: io::Read> {
             "PUT not allowed",
         ))
     }
+
+    fn post(
+        &mut self,
+        _uri: String,
+        _stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "PUT not allowed",
+        ))
+    }
 }
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
@@ -192,13 +208,12 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         match request.method {
             HttpMethod::Get => self.request_handler.get(request.uri),
             HttpMethod::Head => self.request_handler.head(request.uri),
+            HttpMethod::Post => {
+                request.body.require_length()?;
+                self.request_handler.post(request.uri, request.body)
+            }
             HttpMethod::Put => {
-                if !request.body.has_length() {
-                    return Err(HttpResponse::from_string(
-                        HttpStatus::LengthRequired,
-                        "length required",
-                    ));
-                }
+                request.body.require_length()?;
                 self.request_handler.put(request.uri, request.body)
             }
         }

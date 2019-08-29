@@ -15,6 +15,7 @@ pub enum Error {
     UnexpectedStatus(HttpStatus),
     UnexpectedMethod(HttpMethod),
     UrlError(String),
+    LengthRequired,
     Other(String),
 
     #[cfg(feature = "std")]
