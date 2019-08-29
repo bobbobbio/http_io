@@ -565,6 +565,7 @@ pub enum HttpStatus {
     OK,
     LengthRequired,
     InternalServerError,
+    MethodNotAllowed,
     Unknown(u32),
 }
 
@@ -574,8 +575,9 @@ impl str::FromStr for HttpStatus {
     fn from_str(s: &str) -> Result<Self> {
         let mut parser = Parser::new(s);
         match parser.parse_number()? {
-            301 => Ok(HttpStatus::MovedPermanently),
             200 => Ok(HttpStatus::OK),
+            301 => Ok(HttpStatus::MovedPermanently),
+            405 => Ok(HttpStatus::MethodNotAllowed),
             411 => Ok(HttpStatus::LengthRequired),
             500 => Ok(HttpStatus::InternalServerError),
             v => Ok(HttpStatus::Unknown(v)),
@@ -588,6 +590,7 @@ impl fmt::Display for HttpStatus {
         match self {
             HttpStatus::OK => write!(f, "200 OK"),
             HttpStatus::MovedPermanently => write!(f, "301 Moved Permanently"),
+            HttpStatus::MethodNotAllowed => write!(f, "405 Method Not Allowed"),
             HttpStatus::LengthRequired => write!(f, "411 Length Required"),
             HttpStatus::InternalServerError => write!(f, "500 Internal Server Error"),
             HttpStatus::Unknown(v) => write!(f, "{}", v),
@@ -609,6 +612,10 @@ mod http_status_tests {
         assert_eq!(
             "301".parse::<HttpStatus>().unwrap(),
             HttpStatus::MovedPermanently
+        );
+        assert_eq!(
+            "405".parse::<HttpStatus>().unwrap(),
+            HttpStatus::MethodNotAllowed
         );
         assert_eq!(
             "411".parse::<HttpStatus>().unwrap(),
@@ -640,6 +647,10 @@ mod http_status_tests {
         );
         assert_eq!(&HttpStatus::OK.to_string(), "200 OK");
         assert_eq!(
+            &HttpStatus::MethodNotAllowed.to_string(),
+            "405 Method Not Allowed"
+        );
+        assert_eq!(
             &HttpStatus::LengthRequired.to_string(),
             "411 Length Required"
         );
@@ -662,6 +673,27 @@ mod http_status_tests {
         assert_eq!(
             &"200 OK".parse::<HttpStatus>().unwrap().to_string(),
             "200 OK"
+        );
+        assert_eq!(
+            &"405 Method Not Allowed"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "405 Method Not Allowed"
+        );
+        assert_eq!(
+            &"411 Length Required"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "411 Length Required"
+        );
+        assert_eq!(
+            &"500 Internal Server Error"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "500 Internal Server Error"
         );
         assert_eq!(&"889".parse::<HttpStatus>().unwrap().to_string(), "889");
     }
