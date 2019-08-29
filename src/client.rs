@@ -83,6 +83,14 @@ impl HttpRequestBuilder {
         HttpRequestBuilder::new(url, HttpMethod::Get)
     }
 
+    /// Create a `HttpRequestBuilder` to build a HEAD request
+    pub fn head<U: TryInto<Url>>(url: U) -> Result<Self>
+    where
+        <U as TryInto<Url>>::Error: Display,
+    {
+        HttpRequestBuilder::new(url, HttpMethod::Head)
+    }
+
     /// Create a `HttpRequestBuilder` to build a PUT request
     pub fn put<U: TryInto<Url>>(url: U) -> Result<Self>
     where

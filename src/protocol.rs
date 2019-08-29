@@ -925,6 +925,7 @@ mod http_response_tests {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HttpMethod {
     Get,
+    Head,
     Put,
 }
 
@@ -933,6 +934,7 @@ impl str::FromStr for HttpMethod {
     fn from_str(s: &str) -> Result<Self> {
         match s.to_uppercase().as_ref() {
             "GET" => Ok(HttpMethod::Get),
+            "HEAD" => Ok(HttpMethod::Head),
             "PUT" => Ok(HttpMethod::Put),
             m => Err(Error::ParseError(format!("Unknown method {}", m))),
         }
@@ -943,6 +945,7 @@ impl fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             HttpMethod::Get => write!(f, "GET"),
+            HttpMethod::Head => write!(f, "HEAD"),
             HttpMethod::Put => write!(f, "PUT"),
         }
     }
@@ -956,6 +959,8 @@ mod http_method_tests {
     #[test]
     fn parse_success() {
         assert_eq!("GET".parse::<HttpMethod>().unwrap(), HttpMethod::Get);
+        assert_eq!("HEAD".parse::<HttpMethod>().unwrap(), HttpMethod::Head);
+        assert_eq!("PUT".parse::<HttpMethod>().unwrap(), HttpMethod::Put);
     }
 
     #[test]
@@ -967,11 +972,15 @@ mod http_method_tests {
     #[test]
     fn display() {
         assert_eq!(&HttpMethod::Get.to_string(), "GET");
+        assert_eq!(&HttpMethod::Head.to_string(), "HEAD");
+        assert_eq!(&HttpMethod::Put.to_string(), "PUT");
     }
 
     #[test]
     fn parse_display_round_trip() {
         assert_eq!(&"GET".parse::<HttpMethod>().unwrap().to_string(), "GET");
+        assert_eq!(&"HEAD".parse::<HttpMethod>().unwrap().to_string(), "HEAD");
+        assert_eq!(&"PUT".parse::<HttpMethod>().unwrap().to_string(), "PUT");
     }
 }
 

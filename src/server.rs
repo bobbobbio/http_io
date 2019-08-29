@@ -127,12 +127,31 @@ where
 /// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
     type Error: Into<HttpResponse<Box<dyn io::Read>>>;
-    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error>;
+
+    fn get(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "GET not allowed",
+        ))
+    }
+
+    fn head(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::new(
+            HttpStatus::MethodNotAllowed,
+            Box::new(io::empty()),
+        ))
+    }
+
     fn put(
         &mut self,
-        uri: String,
-        stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error>;
+        _uri: String,
+        _stream: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "PUT not allowed",
+        ))
+    }
 }
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
@@ -172,6 +191,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
 
         match request.method {
             HttpMethod::Get => self.request_handler.get(request.uri),
+            HttpMethod::Head => self.request_handler.head(request.uri),
             HttpMethod::Put => {
                 if !request.body.has_length() {
                     return Err(HttpResponse::from_string(

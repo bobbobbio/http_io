@@ -1,4 +1,4 @@
-use crate::protocol::HttpStatus;
+use crate::protocol::{HttpMethod, HttpStatus};
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 use core::fmt;
@@ -13,6 +13,7 @@ pub enum Error {
     UnexpectedScheme(String),
     UnexpectedEof(String),
     UnexpectedStatus(HttpStatus),
+    UnexpectedMethod(HttpMethod),
     UrlError(String),
     Other(String),
 

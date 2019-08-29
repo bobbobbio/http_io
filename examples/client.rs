@@ -1,4 +1,4 @@
-use http_io::error::Result;
+use http_io::error::{Error, Result};
 use http_io::protocol::HttpMethod;
 use http_io::url::Url;
 use std::io;
@@ -18,6 +18,7 @@ fn main() -> Result<()> {
     let mut body = match opts.method {
         HttpMethod::Get => http_io::client::get(opts.url)?,
         HttpMethod::Put => http_io::client::put(opts.url, opts.data.as_bytes())?,
+        m => return Err(Error::UnexpectedMethod(m)),
     };
     io::copy(&mut body, &mut io::stdout())?;
     Ok(())
