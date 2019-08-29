@@ -2,7 +2,6 @@ use std::io;
 use std::net;
 use std::path::PathBuf;
 
-use http_io::error::{Error, Result};
 use http_io::protocol::{HttpBody, HttpResponse, HttpStatus};
 use http_io::server::{HttpRequestHandler, HttpServer};
 
@@ -15,6 +14,23 @@ impl FileHandler {
         FileHandler {
             file_root: file_root.into(),
         }
+    }
+}
+
+#[derive(Debug)]
+struct Error(io::Error);
+
+type Result<T> = std::result::Result<T, Error>;
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Self(e)
+    }
+}
+
+impl From<Error> for HttpResponse<Box<dyn io::Read>> {
+    fn from(e: Error) -> Self {
+        HttpResponse::from_string(HttpStatus::InternalServerError, e.0.to_string())
     }
 }
 
