@@ -276,6 +276,7 @@ fn get_test<
     let (port, mut server) = server_factor(vec![ExpectedRequest {
         expected_method: HttpMethod::Get,
         expected_uri: "/".into(),
+        expected_body: "".into(),
         response_status: HttpStatus::OK,
         response_body: "hello from server".into(),
     }])?;
@@ -312,4 +313,45 @@ where
         .map_err(|e| Error::ParseError(e.to_string()))?;
     let builder = HttpRequestBuilder::put(url.clone())?;
     Ok(send_request(builder, url, body)?)
+}
+
+#[cfg(test)]
+fn put_test<
+    L: Listen + Send + 'static,
+    T: HttpRequestHandler<L::stream> + Send + 'static,
+    F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+>(
+    scheme: Scheme,
+    server_factor: F,
+) -> Result<()> {
+    let (port, mut server) = server_factor(vec![ExpectedRequest {
+        expected_method: HttpMethod::Put,
+        expected_uri: "/".into(),
+        expected_body: "hello from client".into(),
+        response_status: HttpStatus::OK,
+        response_body: "hello from server".into(),
+    }])?;
+    let handle = std::thread::spawn(move || server.serve_one());
+
+    let mut incoming_body = put(
+        format!("{}://localhost:{}/", scheme, port).as_ref(),
+        "hello from client".as_bytes(),
+    )?;
+
+    handle.join().unwrap()?;
+
+    let mut body_str = String::new();
+    incoming_body.read_to_string(&mut body_str)?;
+    assert_eq!(body_str, "hello from server");
+    Ok(())
+}
+
+#[test]
+fn put_request() -> Result<()> {
+    put_test(Scheme::Http, test_server)
+}
+
+#[test]
+fn put_request_ssl() -> Result<()> {
+    put_test(Scheme::Https, test_ssl_server)
 }

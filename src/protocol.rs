@@ -142,8 +142,11 @@ impl<S: io::Read> io::Read for HttpBody<S> {
 }
 
 impl<S: io::Read> HttpBody<S> {
-    pub fn new(encoding: Option<&str>, content_length: Option<u64>, socket: S) -> Self {
-        let body = io::BufReader::new(socket);
+    pub fn new(
+        encoding: Option<&str>,
+        content_length: Option<u64>,
+        body: io::BufReader<S>,
+    ) -> Self {
         if encoding == Some("chunked") {
             HttpBody::Chunked(HttpChunkedBody::new(body))
         } else if let Some(length) = content_length {
@@ -155,9 +158,9 @@ impl<S: io::Read> HttpBody<S> {
 
     pub fn has_length(&self) -> bool {
         match self {
-            HttpBody::Chunked(_) => false,
-            HttpBody::Limited(_) => false,
-            HttpBody::ReadTilClose(_) => true,
+            HttpBody::Chunked(_) => true,
+            HttpBody::Limited(_) => true,
+            HttpBody::ReadTilClose(_) => false,
         }
     }
 }
@@ -842,7 +845,7 @@ impl<B: io::Read> HttpResponse<B> {
         let encoding = headers.get("Transfer-Encoding");
         let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
 
-        let body = HttpBody::new(encoding, content_length, socket);
+        let body = HttpBody::new(encoding, content_length, io::BufReader::new(socket));
 
         Ok(HttpResponse {
             version,
@@ -972,6 +975,7 @@ impl<S: io::Read + io::Write> io::Write for OutgoingBody<S> {
         }
         write!(&mut self.socket, "{:x}\r\n", len)?;
         self.socket.write_all(buf)?;
+        write!(&mut self.socket, "\r\n")?;
         Ok(len)
     }
 
@@ -987,6 +991,7 @@ impl<S: io::Read + io::Write> OutgoingBody<S> {
 
     pub fn finish(mut self) -> Result<HttpResponse<S>> {
         write!(&mut self.socket, "0\r\n\r\n")?;
+        self.socket.flush()?;
 
         let socket = self.socket.into_inner()?;
         Ok(HttpResponse::deserialize(socket)?)
@@ -1011,7 +1016,7 @@ impl<B: io::Read> HttpRequest<B> {
 
         let encoding = headers.get("Transfer-Encoding");
         let content_length = headers.get("Content-Length").map(str::parse).transpose()?;
-        let body = HttpBody::new(encoding, content_length, stream.into_inner());
+        let body = HttpBody::new(encoding, content_length, stream);
 
         Ok(HttpRequest {
             method,

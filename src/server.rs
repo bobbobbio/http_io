@@ -203,6 +203,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
 pub struct ExpectedRequest {
     pub expected_method: HttpMethod,
     pub expected_uri: String,
+    pub expected_body: String,
 
     pub response_status: HttpStatus,
     pub response_body: String,
@@ -219,6 +220,9 @@ impl TestRequestHandler {
         Self { script }
     }
 }
+
+#[cfg(test)]
+use std::io::Read;
 
 #[cfg(test)]
 impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
@@ -238,11 +242,15 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
     fn put(
         &mut self,
         uri: String,
-        _stream: HttpBody<&mut I>,
+        mut stream: HttpBody<&mut I>,
     ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Put);
         assert_eq!(request.expected_uri, uri);
+
+        let mut body_string = String::new();
+        stream.read_to_string(&mut body_string).unwrap();
+        assert_eq!(request.expected_body, body_string);
 
         Ok(HttpResponse::from_string(
             request.response_status,
