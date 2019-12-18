@@ -287,9 +287,9 @@ fn get_test<
     F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
 >(
     scheme: Scheme,
-    server_factor: F,
+    server_factory: F,
 ) -> Result<()> {
-    let (port, mut server) = server_factor(vec![ExpectedRequest {
+    let (port, mut server) = server_factory(vec![ExpectedRequest {
         expected_method: HttpMethod::Get,
         expected_uri: "/".into(),
         expected_body: "".into(),
@@ -338,9 +338,9 @@ fn put_test<
     F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
 >(
     scheme: Scheme,
-    server_factor: F,
+    server_factory: F,
 ) -> Result<()> {
-    let (port, mut server) = server_factor(vec![ExpectedRequest {
+    let (port, mut server) = server_factory(vec![ExpectedRequest {
         expected_method: HttpMethod::Put,
         expected_uri: "/".into(),
         expected_body: "hello from client".into(),
