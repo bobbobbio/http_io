@@ -141,9 +141,16 @@ pub trait HttpRequestHandler<I: io::Read> {
     }
 
     fn head(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
-        Ok(HttpResponse::new(
+        Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
-            Box::new(io::empty()),
+            "HEAD not allowed",
+        ))
+    }
+
+    fn options(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "OPTIONS not allowed",
         ))
     }
 
@@ -208,6 +215,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         match request.method {
             HttpMethod::Get => self.request_handler.get(request.uri),
             HttpMethod::Head => self.request_handler.head(request.uri),
+            HttpMethod::Options => self.request_handler.options(request.uri),
             HttpMethod::Post => {
                 request.body.require_length()?;
                 self.request_handler.post(request.uri, request.body)
