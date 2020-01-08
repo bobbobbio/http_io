@@ -930,6 +930,7 @@ mod http_response_tests {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HttpMethod {
+    Delete,
     Get,
     Head,
     Options,
@@ -941,6 +942,7 @@ impl str::FromStr for HttpMethod {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self> {
         match s.to_uppercase().as_ref() {
+            "DELETE" => Ok(HttpMethod::Delete),
             "GET" => Ok(HttpMethod::Get),
             "HEAD" => Ok(HttpMethod::Head),
             "OPTIONS" => Ok(HttpMethod::Options),
@@ -954,6 +956,7 @@ impl str::FromStr for HttpMethod {
 impl fmt::Display for HttpMethod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            HttpMethod::Delete => write!(f, "DELETE"),
             HttpMethod::Get => write!(f, "GET"),
             HttpMethod::Head => write!(f, "HEAD"),
             HttpMethod::Options => write!(f, "OPTIONS"),
@@ -970,6 +973,7 @@ mod http_method_tests {
 
     #[test]
     fn parse_success() {
+        assert_eq!("DELETE".parse::<HttpMethod>().unwrap(), HttpMethod::Delete);
         assert_eq!("GET".parse::<HttpMethod>().unwrap(), HttpMethod::Get);
         assert_eq!("HEAD".parse::<HttpMethod>().unwrap(), HttpMethod::Head);
         assert_eq!(
@@ -988,6 +992,7 @@ mod http_method_tests {
 
     #[test]
     fn display() {
+        assert_eq!(&HttpMethod::Delete.to_string(), "DELETE");
         assert_eq!(&HttpMethod::Get.to_string(), "GET");
         assert_eq!(&HttpMethod::Head.to_string(), "HEAD");
         assert_eq!(&HttpMethod::Options.to_string(), "OPTIONS");
@@ -997,6 +1002,10 @@ mod http_method_tests {
 
     #[test]
     fn parse_display_round_trip() {
+        assert_eq!(
+            &"DELETE".parse::<HttpMethod>().unwrap().to_string(),
+            "DELETE"
+        );
         assert_eq!(&"GET".parse::<HttpMethod>().unwrap().to_string(), "GET");
         assert_eq!(&"HEAD".parse::<HttpMethod>().unwrap().to_string(), "HEAD");
         assert_eq!(&"POST".parse::<HttpMethod>().unwrap().to_string(), "POST");

@@ -133,6 +133,13 @@ where
 pub trait HttpRequestHandler<I: io::Read> {
     type Error: Into<HttpResponse<Box<dyn io::Read>>>;
 
+    fn delete(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "DELETE not allowed",
+        ))
+    }
+
     fn get(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
@@ -213,6 +220,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
         let request = HttpRequest::deserialize(io::BufReader::new(stream))?;
 
         match request.method {
+            HttpMethod::Delete => self.request_handler.delete(request.uri),
             HttpMethod::Get => self.request_handler.get(request.uri),
             HttpMethod::Head => self.request_handler.head(request.uri),
             HttpMethod::Options => self.request_handler.options(request.uri),

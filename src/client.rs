@@ -75,6 +75,14 @@ pub struct HttpRequestBuilder {
 }
 
 impl HttpRequestBuilder {
+    /// Create a `HttpRequestBuilder` to build a DELETE request
+    pub fn delete<U: TryInto<Url>>(url: U) -> Result<Self>
+    where
+        <U as TryInto<Url>>::Error: Display,
+    {
+        HttpRequestBuilder::new(url, HttpMethod::Delete)
+    }
+
     /// Create a `HttpRequestBuilder` to build a GET request
     pub fn get<U: TryInto<Url>>(url: U) -> Result<Self>
     where
