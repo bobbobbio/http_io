@@ -182,6 +182,13 @@ pub trait HttpRequestHandler<I: io::Read> {
             "PUT not allowed",
         ))
     }
+
+    fn trace(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+        Ok(HttpResponse::from_string(
+            HttpStatus::MethodNotAllowed,
+            "TRACE not allowed",
+        ))
+    }
 }
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
@@ -232,6 +239,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
                 request.body.require_length()?;
                 self.request_handler.put(request.uri, request.body)
             }
+            HttpMethod::Trace => self.request_handler.trace(request.uri),
         }
         .map_err(|e| e.into())
     }

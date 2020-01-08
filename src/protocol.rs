@@ -936,6 +936,7 @@ pub enum HttpMethod {
     Options,
     Post,
     Put,
+    Trace,
 }
 
 impl str::FromStr for HttpMethod {
@@ -948,6 +949,7 @@ impl str::FromStr for HttpMethod {
             "OPTIONS" => Ok(HttpMethod::Options),
             "POST" => Ok(HttpMethod::Post),
             "PUT" => Ok(HttpMethod::Put),
+            "TRACE" => Ok(HttpMethod::Trace),
             m => Err(Error::ParseError(format!("Unknown method {}", m))),
         }
     }
@@ -962,6 +964,7 @@ impl fmt::Display for HttpMethod {
             HttpMethod::Options => write!(f, "OPTIONS"),
             HttpMethod::Post => write!(f, "POST"),
             HttpMethod::Put => write!(f, "PUT"),
+            HttpMethod::Trace => write!(f, "TRACE"),
         }
     }
 }
@@ -982,6 +985,7 @@ mod http_method_tests {
         );
         assert_eq!("POST".parse::<HttpMethod>().unwrap(), HttpMethod::Post);
         assert_eq!("PUT".parse::<HttpMethod>().unwrap(), HttpMethod::Put);
+        assert_eq!("TRACE".parse::<HttpMethod>().unwrap(), HttpMethod::Trace);
     }
 
     #[test]
@@ -998,6 +1002,7 @@ mod http_method_tests {
         assert_eq!(&HttpMethod::Options.to_string(), "OPTIONS");
         assert_eq!(&HttpMethod::Post.to_string(), "POST");
         assert_eq!(&HttpMethod::Put.to_string(), "PUT");
+        assert_eq!(&HttpMethod::Trace.to_string(), "TRACE");
     }
 
     #[test]
@@ -1014,6 +1019,7 @@ mod http_method_tests {
             "OPTIONS"
         );
         assert_eq!(&"PUT".parse::<HttpMethod>().unwrap().to_string(), "PUT");
+        assert_eq!(&"TRACE".parse::<HttpMethod>().unwrap().to_string(), "TRACE");
     }
 }
 
