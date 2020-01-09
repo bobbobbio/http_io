@@ -19,13 +19,15 @@ struct HttpBodyChunk<S: io::Read> {
 }
 
 pub struct HttpChunkedBody<S: io::Read> {
+    content_length: Option<u64>,
     stream: Option<HttpReadTilCloseBody<S>>,
     chunk: Option<HttpBodyChunk<S>>,
 }
 
 impl<S: io::Read> HttpChunkedBody<S> {
-    fn new(stream: HttpReadTilCloseBody<S>) -> Self {
+    fn new(content_length: Option<u64>, stream: HttpReadTilCloseBody<S>) -> Self {
         HttpChunkedBody {
+            content_length,
             stream: Some(stream),
             chunk: None,
         }
@@ -96,7 +98,7 @@ mod chunked_encoding_tests {
 
     fn chunk_test(i: &'static str) -> Result<String> {
         let input = io::BufReader::new(io::Cursor::new(i));
-        let mut body = HttpChunkedBody::new(input);
+        let mut body = HttpChunkedBody::new(None, input);
 
         let mut output = String::new();
         body.read_to_string(&mut output)?;
@@ -148,7 +150,7 @@ impl<S: io::Read> HttpBody<S> {
         body: io::BufReader<S>,
     ) -> Self {
         if encoding == Some("chunked") {
-            HttpBody::Chunked(HttpChunkedBody::new(body))
+            HttpBody::Chunked(HttpChunkedBody::new(content_length, body))
         } else if let Some(length) = content_length {
             HttpBody::Limited(body.take(length))
         } else {
@@ -169,6 +171,38 @@ impl<S: io::Read> HttpBody<S> {
             Ok(())
         }
     }
+
+    pub fn content_length(&self) -> Option<u64> {
+        match self {
+            HttpBody::Chunked(c) => c.content_length.clone(),
+            HttpBody::Limited(c) => Some(c.limit()),
+            HttpBody::ReadTilClose(_) => None,
+        }
+    }
+}
+
+#[test]
+fn chunked_body_no_content_length() {
+    let body = HttpBody::new(Some("chunked"), None, io::BufReader::new(io::empty()));
+    assert_eq!(body.content_length(), None);
+}
+
+#[test]
+fn chunked_body_content_length() {
+    let body = HttpBody::new(Some("chunked"), Some(12), io::BufReader::new(io::empty()));
+    assert_eq!(body.content_length(), Some(12));
+}
+
+#[test]
+fn read_till_close_body_has_no_content_length() {
+    let body = HttpBody::new(None, None, io::BufReader::new(io::empty()));
+    assert_eq!(body.content_length(), None);
+}
+
+#[test]
+fn limited_body_content_length() {
+    let body = HttpBody::new(None, Some(12), io::BufReader::new(io::empty()));
+    assert_eq!(body.content_length(), Some(12));
 }
 
 pub struct CrLfStream<W> {

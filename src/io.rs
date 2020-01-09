@@ -203,6 +203,10 @@ impl<T> Take<T> {
     pub fn into_inner(self) -> T {
         self.inner
     }
+
+    pub fn limit(&self) -> u64 {
+        self.limit
+    }
 }
 
 impl<T: Read> Read for Take<T> {
