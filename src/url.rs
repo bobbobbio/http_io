@@ -165,6 +165,18 @@ impl Path {
     }
 }
 
+impl Path {
+    pub fn components(&self) -> impl Iterator<Item = &str> {
+        self.components.iter().map(|c| c.as_str())
+    }
+}
+
+#[test]
+fn path_components() {
+    let path = Path::new(&["a", "b", "c"]);
+    assert_eq!(path.components().collect::<Vec<_>>(), vec!["a", "b", "c"])
+}
+
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
