@@ -175,6 +175,10 @@ impl Path {
     pub fn trailing_slash(&self) -> bool {
         self.trailing_slash
     }
+
+    pub fn push(&mut self, component: &str) {
+        self.components.push(component.into());
+    }
 }
 
 #[test]
