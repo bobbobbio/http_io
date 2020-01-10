@@ -154,13 +154,15 @@ fn percent_decode_error() {
 #[derive(PartialEq, Debug, Clone)]
 pub struct Path {
     components: Vec<String>,
+    trailing_slash: bool,
 }
 
 #[cfg(test)]
 impl Path {
-    fn new(components: &[&str]) -> Self {
+    fn new(components: &[&str], trailing_slash: bool) -> Self {
         Self {
             components: components.iter().map(|&c| c.into()).collect(),
+            trailing_slash,
         }
     }
 }
@@ -169,25 +171,34 @@ impl Path {
     pub fn components(&self) -> impl Iterator<Item = &str> {
         self.components.iter().map(|c| c.as_str())
     }
+
+    pub fn trailing_slash(&self) -> bool {
+        self.trailing_slash
+    }
 }
 
 #[test]
 fn path_components() {
-    let path = Path::new(&["a", "b", "c"]);
+    let path = Path::new(&["a", "b", "c"], false);
     assert_eq!(path.components().collect::<Vec<_>>(), vec!["a", "b", "c"])
 }
 
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "/{}",
-            self.components
-                .iter()
-                .map(|c| percent_encode(c.as_ref()))
-                .collect::<Vec<_>>()
-                .join("/")
-        )
+        if self.components.is_empty() {
+            write!(f, "{}", if self.trailing_slash { "/" } else { "" })
+        } else {
+            write!(
+                f,
+                "/{}{}",
+                self.components
+                    .iter()
+                    .map(|c| percent_encode(c.as_ref()))
+                    .collect::<Vec<_>>()
+                    .join("/"),
+                if self.trailing_slash { "/" } else { "" }
+            )
+        }
     }
 }
 
@@ -201,6 +212,7 @@ impl str::FromStr for Path {
                 .filter(|s| !s.is_empty())
                 .map(percent_decode)
                 .collect::<Result<Vec<_>>>()?,
+            trailing_slash: s.ends_with("/"),
         })
     }
 }
@@ -324,8 +336,6 @@ impl str::FromStr for Url {
             _ => None,
         };
 
-        parser.expect("/").ok();
-
         let path = parser
             .parse_until_any(&['?', '#'])
             .or_else(|_| parser.parse_remaining())
@@ -391,6 +401,7 @@ mod tests {
         authority: &str,
         port: Option<u16>,
         path: &[&str],
+        trailing_slash: bool,
         query: Option<&str>,
         fragment: Option<&str>,
         user_information: Option<&str>,
@@ -400,7 +411,7 @@ mod tests {
             scheme,
             authority,
             port,
-            Path::new(path),
+            Path::new(path, trailing_slash),
             query,
             fragment,
             user_information,
@@ -416,6 +427,7 @@ mod tests {
             "google.com",
             None,
             &[],
+            false,
             None,
             None,
             None,
@@ -426,6 +438,18 @@ mod tests {
             "google.com",
             None,
             &[],
+            true,
+            None,
+            None,
+            None,
+        );
+        parse_test(
+            "https://google.com/a/b/c/",
+            Scheme::Https,
+            "google.com",
+            None,
+            &["a", "b", "c"],
+            true,
             None,
             None,
             None,
@@ -436,6 +460,7 @@ mod tests {
             "www.google.com",
             None,
             &["a", "b", "c"],
+            false,
             None,
             None,
             None,
@@ -450,6 +475,7 @@ mod tests {
             "google.com",
             None,
             &["/foo/bar"],
+            false,
             None,
             None,
             None,
@@ -464,6 +490,7 @@ mod tests {
             "google.com",
             None,
             &[],
+            false,
             Some("foobar"),
             None,
             None,
@@ -478,6 +505,7 @@ mod tests {
             "google.com",
             None,
             &[],
+            false,
             None,
             Some("foobar"),
             None,
@@ -492,6 +520,7 @@ mod tests {
             "google.com",
             None,
             &[],
+            false,
             Some("foo"),
             Some("bar"),
             None,
@@ -506,6 +535,7 @@ mod tests {
             "google.com",
             None,
             &[],
+            false,
             None,
             Some("bar?foo"),
             None,
@@ -520,6 +550,7 @@ mod tests {
             "google.com",
             None,
             &["something"],
+            false,
             None,
             None,
             Some("user:pass"),
@@ -534,6 +565,7 @@ mod tests {
             "google.com",
             Some(8080),
             &[],
+            false,
             None,
             Some("foobar"),
             None,

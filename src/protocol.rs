@@ -1570,10 +1570,17 @@ pub struct HttpRequest<B: io::Read> {
 }
 
 impl HttpRequest<io::Empty> {
-    pub fn new<S: Into<String>>(method: HttpMethod, uri: S) -> Self {
+    pub fn new<S: Into<String>>(method: HttpMethod, uri_in: S) -> Self {
+        let uri_in = uri_in.into();
+        let uri = if uri_in.is_empty() {
+            "/".into()
+        } else {
+            uri_in
+        };
+
         HttpRequest {
             method,
-            uri: uri.into(),
+            uri,
             version: HttpVersion::new(1, 1),
             headers: HttpHeaders::new(),
             body: HttpBody::ReadTilClose(io::BufReader::new(io::empty())),
