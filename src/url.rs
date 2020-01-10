@@ -178,6 +178,7 @@ impl Path {
 
     pub fn push(&mut self, component: &str) {
         self.components.push(component.into());
+        self.trailing_slash = false;
     }
 }
 
@@ -185,6 +186,14 @@ impl Path {
 fn path_components() {
     let path = Path::new(&["a", "b", "c"], false);
     assert_eq!(path.components().collect::<Vec<_>>(), vec!["a", "b", "c"])
+}
+
+#[test]
+fn path_push() {
+    let mut path = Path::new(&["a", "b"], true);
+    assert_eq!(path.to_string(), "/a/b/");
+    path.push("c");
+    assert_eq!(path.to_string(), "/a/b/c");
 }
 
 impl fmt::Display for Path {
