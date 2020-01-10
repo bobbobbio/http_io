@@ -601,11 +601,46 @@ mod http_version_tests {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpStatus {
-    MovedPermanently,
-    OK,
-    LengthRequired,
+    Accepted,
+    BadGateway,
+    BadRequest,
+    Conflict,
+    Continue,
+    Created,
+    ExpectationFailed,
+    Forbidden,
+    Found,
+    GatewayTimeout,
+    Gone,
+    HttpVersionNotSupported,
     InternalServerError,
+    LengthRequired,
     MethodNotAllowed,
+    MovedPermanently,
+    MultipleChoices,
+    NoContent,
+    NonAuthoritativeInformation,
+    NotAcceptable,
+    NotFound,
+    NotImplemented,
+    NotModified,
+    OK,
+    PartialContent,
+    PaymentRequired,
+    PreconditionFailed,
+    ProxyAuthenticationRequired,
+    RequestEntityTooLarge,
+    RequestTimeout,
+    RequestUriTooLong,
+    RequestedRangeNotSatisfiable,
+    ResetContent,
+    SeeOther,
+    ServiceUnavailable,
+    SwitchingProtocols,
+    TemporaryRedirect,
+    Unauthorized,
+    UnsupportedMediaType,
+    UseProxy,
     Unknown(u32),
 }
 
@@ -615,11 +650,46 @@ impl str::FromStr for HttpStatus {
     fn from_str(s: &str) -> Result<Self> {
         let mut parser = Parser::new(s);
         match parser.parse_number()? {
+            100 => Ok(HttpStatus::Continue),
+            101 => Ok(HttpStatus::SwitchingProtocols),
             200 => Ok(HttpStatus::OK),
+            201 => Ok(HttpStatus::Created),
+            202 => Ok(HttpStatus::Accepted),
+            203 => Ok(HttpStatus::NonAuthoritativeInformation),
+            204 => Ok(HttpStatus::NoContent),
+            205 => Ok(HttpStatus::ResetContent),
+            206 => Ok(HttpStatus::PartialContent),
+            300 => Ok(HttpStatus::MultipleChoices),
             301 => Ok(HttpStatus::MovedPermanently),
+            302 => Ok(HttpStatus::Found),
+            303 => Ok(HttpStatus::SeeOther),
+            304 => Ok(HttpStatus::NotModified),
+            305 => Ok(HttpStatus::UseProxy),
+            307 => Ok(HttpStatus::TemporaryRedirect),
+            400 => Ok(HttpStatus::BadRequest),
+            401 => Ok(HttpStatus::Unauthorized),
+            402 => Ok(HttpStatus::PaymentRequired),
+            403 => Ok(HttpStatus::Forbidden),
+            404 => Ok(HttpStatus::NotFound),
             405 => Ok(HttpStatus::MethodNotAllowed),
+            406 => Ok(HttpStatus::NotAcceptable),
+            407 => Ok(HttpStatus::ProxyAuthenticationRequired),
+            408 => Ok(HttpStatus::RequestTimeout),
+            409 => Ok(HttpStatus::Conflict),
+            410 => Ok(HttpStatus::Gone),
             411 => Ok(HttpStatus::LengthRequired),
+            412 => Ok(HttpStatus::PreconditionFailed),
+            413 => Ok(HttpStatus::RequestEntityTooLarge),
+            414 => Ok(HttpStatus::RequestUriTooLong),
+            415 => Ok(HttpStatus::UnsupportedMediaType),
+            416 => Ok(HttpStatus::RequestedRangeNotSatisfiable),
+            417 => Ok(HttpStatus::ExpectationFailed),
             500 => Ok(HttpStatus::InternalServerError),
+            501 => Ok(HttpStatus::NotImplemented),
+            502 => Ok(HttpStatus::BadGateway),
+            503 => Ok(HttpStatus::ServiceUnavailable),
+            504 => Ok(HttpStatus::GatewayTimeout),
+            505 => Ok(HttpStatus::HttpVersionNotSupported),
             v => Ok(HttpStatus::Unknown(v)),
         }
     }
@@ -628,11 +698,52 @@ impl str::FromStr for HttpStatus {
 impl fmt::Display for HttpStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            HttpStatus::OK => write!(f, "200 OK"),
-            HttpStatus::MovedPermanently => write!(f, "301 Moved Permanently"),
-            HttpStatus::MethodNotAllowed => write!(f, "405 Method Not Allowed"),
-            HttpStatus::LengthRequired => write!(f, "411 Length Required"),
+            HttpStatus::Accepted => write!(f, "202 Accepted"),
+            HttpStatus::BadGateway => write!(f, "502 Bad Gateway"),
+            HttpStatus::BadRequest => write!(f, "400 Bad Request"),
+            HttpStatus::Conflict => write!(f, "409 Conflict"),
+            HttpStatus::Continue => write!(f, "100 Continue"),
+            HttpStatus::Created => write!(f, "201 Created"),
+            HttpStatus::ExpectationFailed => write!(f, "417 Expectation Failed"),
+            HttpStatus::Forbidden => write!(f, "403 Forbidden"),
+            HttpStatus::Found => write!(f, "302 Found"),
+            HttpStatus::GatewayTimeout => write!(f, "504 Gateway Timeout"),
+            HttpStatus::Gone => write!(f, "410 Gone"),
+            HttpStatus::HttpVersionNotSupported => write!(f, "505 HTTP Version Not Supported"),
             HttpStatus::InternalServerError => write!(f, "500 Internal Server Error"),
+            HttpStatus::LengthRequired => write!(f, "411 Length Required"),
+            HttpStatus::MethodNotAllowed => write!(f, "405 Method Not Allowed"),
+            HttpStatus::MovedPermanently => write!(f, "301 Moved Permanently"),
+            HttpStatus::MultipleChoices => write!(f, "300 Multiple Choices"),
+            HttpStatus::NoContent => write!(f, "204 No Content"),
+            HttpStatus::NonAuthoritativeInformation => {
+                write!(f, "203 No Authoritative Information")
+            }
+            HttpStatus::NotAcceptable => write!(f, "406 Not Acceptable"),
+            HttpStatus::NotFound => write!(f, "404 Not Found"),
+            HttpStatus::NotImplemented => write!(f, "501 Not Implemented"),
+            HttpStatus::NotModified => write!(f, "304 NotModified"),
+            HttpStatus::OK => write!(f, "200 OK"),
+            HttpStatus::PartialContent => write!(f, "206 Partial Content"),
+            HttpStatus::PaymentRequired => write!(f, "402 Payment Required"),
+            HttpStatus::PreconditionFailed => write!(f, "412 Precondition Failed"),
+            HttpStatus::ProxyAuthenticationRequired => {
+                write!(f, "407 Prozy Authentication Required")
+            }
+            HttpStatus::RequestEntityTooLarge => write!(f, "413 Request Entity Too Large"),
+            HttpStatus::RequestTimeout => write!(f, "408 Request Timeout"),
+            HttpStatus::RequestUriTooLong => write!(f, "414 Request URI Too Long"),
+            HttpStatus::RequestedRangeNotSatisfiable => {
+                write!(f, "416 Requested Range Not Satisfiable")
+            }
+            HttpStatus::ResetContent => write!(f, "205 Reset Content"),
+            HttpStatus::SeeOther => write!(f, "303 See Other"),
+            HttpStatus::ServiceUnavailable => write!(f, "503 Service Unavailable"),
+            HttpStatus::SwitchingProtocols => write!(f, "101 Switching Protocols"),
+            HttpStatus::TemporaryRedirect => write!(f, "307 Temporary Redirect"),
+            HttpStatus::Unauthorized => write!(f, "401 Unauthorized"),
+            HttpStatus::UnsupportedMediaType => write!(f, "415 Unsupported Media Type"),
+            HttpStatus::UseProxy => write!(f, "305 Use Proxy"),
             HttpStatus::Unknown(v) => write!(f, "{}", v),
         }
     }
@@ -649,24 +760,125 @@ mod http_status_tests {
             "301 Moved Permanently".parse::<HttpStatus>().unwrap(),
             HttpStatus::MovedPermanently,
         );
+        assert_eq!("100".parse::<HttpStatus>().unwrap(), HttpStatus::Continue);
+        assert_eq!(
+            "101".parse::<HttpStatus>().unwrap(),
+            HttpStatus::SwitchingProtocols
+        );
+        assert_eq!("200".parse::<HttpStatus>().unwrap(), HttpStatus::OK);
+        assert_eq!("201".parse::<HttpStatus>().unwrap(), HttpStatus::Created);
+        assert_eq!("202".parse::<HttpStatus>().unwrap(), HttpStatus::Accepted);
+        assert_eq!(
+            "203".parse::<HttpStatus>().unwrap(),
+            HttpStatus::NonAuthoritativeInformation
+        );
+        assert_eq!("204".parse::<HttpStatus>().unwrap(), HttpStatus::NoContent);
+        assert_eq!(
+            "205".parse::<HttpStatus>().unwrap(),
+            HttpStatus::ResetContent
+        );
+        assert_eq!(
+            "206".parse::<HttpStatus>().unwrap(),
+            HttpStatus::PartialContent
+        );
+        assert_eq!(
+            "300".parse::<HttpStatus>().unwrap(),
+            HttpStatus::MultipleChoices
+        );
         assert_eq!(
             "301".parse::<HttpStatus>().unwrap(),
             HttpStatus::MovedPermanently
         );
+        assert_eq!("302".parse::<HttpStatus>().unwrap(), HttpStatus::Found);
+        assert_eq!("303".parse::<HttpStatus>().unwrap(), HttpStatus::SeeOther);
+        assert_eq!(
+            "304".parse::<HttpStatus>().unwrap(),
+            HttpStatus::NotModified
+        );
+        assert_eq!("305".parse::<HttpStatus>().unwrap(), HttpStatus::UseProxy);
+        assert_eq!(
+            "307".parse::<HttpStatus>().unwrap(),
+            HttpStatus::TemporaryRedirect
+        );
+        assert_eq!("400".parse::<HttpStatus>().unwrap(), HttpStatus::BadRequest);
+        assert_eq!(
+            "401".parse::<HttpStatus>().unwrap(),
+            HttpStatus::Unauthorized
+        );
+        assert_eq!(
+            "402".parse::<HttpStatus>().unwrap(),
+            HttpStatus::PaymentRequired
+        );
+        assert_eq!("403".parse::<HttpStatus>().unwrap(), HttpStatus::Forbidden);
+        assert_eq!("404".parse::<HttpStatus>().unwrap(), HttpStatus::NotFound);
         assert_eq!(
             "405".parse::<HttpStatus>().unwrap(),
             HttpStatus::MethodNotAllowed
         );
         assert_eq!(
+            "406".parse::<HttpStatus>().unwrap(),
+            HttpStatus::NotAcceptable
+        );
+        assert_eq!(
+            "407".parse::<HttpStatus>().unwrap(),
+            HttpStatus::ProxyAuthenticationRequired
+        );
+        assert_eq!(
+            "408".parse::<HttpStatus>().unwrap(),
+            HttpStatus::RequestTimeout
+        );
+        assert_eq!("409".parse::<HttpStatus>().unwrap(), HttpStatus::Conflict);
+        assert_eq!("410".parse::<HttpStatus>().unwrap(), HttpStatus::Gone);
+        assert_eq!(
             "411".parse::<HttpStatus>().unwrap(),
             HttpStatus::LengthRequired
+        );
+        assert_eq!(
+            "412".parse::<HttpStatus>().unwrap(),
+            HttpStatus::PreconditionFailed
+        );
+        assert_eq!(
+            "413".parse::<HttpStatus>().unwrap(),
+            HttpStatus::RequestEntityTooLarge
+        );
+        assert_eq!(
+            "414".parse::<HttpStatus>().unwrap(),
+            HttpStatus::RequestUriTooLong
+        );
+        assert_eq!(
+            "415".parse::<HttpStatus>().unwrap(),
+            HttpStatus::UnsupportedMediaType
+        );
+        assert_eq!(
+            "416".parse::<HttpStatus>().unwrap(),
+            HttpStatus::RequestedRangeNotSatisfiable
+        );
+        assert_eq!(
+            "417".parse::<HttpStatus>().unwrap(),
+            HttpStatus::ExpectationFailed
         );
         assert_eq!(
             "500".parse::<HttpStatus>().unwrap(),
             HttpStatus::InternalServerError
         );
+        assert_eq!(
+            "501".parse::<HttpStatus>().unwrap(),
+            HttpStatus::NotImplemented
+        );
+        assert_eq!("502".parse::<HttpStatus>().unwrap(), HttpStatus::BadGateway);
+        assert_eq!(
+            "503".parse::<HttpStatus>().unwrap(),
+            HttpStatus::ServiceUnavailable
+        );
+        assert_eq!(
+            "504".parse::<HttpStatus>().unwrap(),
+            HttpStatus::GatewayTimeout
+        );
+        assert_eq!(
+            "505".parse::<HttpStatus>().unwrap(),
+            HttpStatus::HttpVersionNotSupported
+        );
         assert_eq!("200 OK".parse::<HttpStatus>().unwrap(), HttpStatus::OK);
-        assert_eq!("200".parse::<HttpStatus>().unwrap(), HttpStatus::OK);
         assert_eq!(
             "899".parse::<HttpStatus>().unwrap(),
             HttpStatus::Unknown(899)
@@ -681,59 +893,351 @@ mod http_status_tests {
 
     #[test]
     fn display() {
+        assert_eq!(&HttpStatus::Accepted.to_string(), "202 Accepted");
+        assert_eq!(&HttpStatus::BadGateway.to_string(), "502 Bad Gateway");
+        assert_eq!(&HttpStatus::BadRequest.to_string(), "400 Bad Request");
+        assert_eq!(&HttpStatus::Conflict.to_string(), "409 Conflict");
+        assert_eq!(&HttpStatus::Continue.to_string(), "100 Continue");
+        assert_eq!(&HttpStatus::Created.to_string(), "201 Created");
         assert_eq!(
-            &HttpStatus::MovedPermanently.to_string(),
-            "301 Moved Permanently"
+            &HttpStatus::ExpectationFailed.to_string(),
+            "417 Expectation Failed"
         );
-        assert_eq!(&HttpStatus::OK.to_string(), "200 OK");
+        assert_eq!(&HttpStatus::Forbidden.to_string(), "403 Forbidden");
+        assert_eq!(&HttpStatus::Found.to_string(), "302 Found");
         assert_eq!(
-            &HttpStatus::MethodNotAllowed.to_string(),
-            "405 Method Not Allowed"
+            &HttpStatus::GatewayTimeout.to_string(),
+            "504 Gateway Timeout"
+        );
+        assert_eq!(&HttpStatus::Gone.to_string(), "410 Gone");
+        assert_eq!(
+            &HttpStatus::HttpVersionNotSupported.to_string(),
+            "505 HTTP Version Not Supported"
+        );
+        assert_eq!(
+            &HttpStatus::InternalServerError.to_string(),
+            "500 Internal Server Error"
         );
         assert_eq!(
             &HttpStatus::LengthRequired.to_string(),
             "411 Length Required"
         );
         assert_eq!(
-            &HttpStatus::InternalServerError.to_string(),
-            "500 Internal Server Error"
+            &HttpStatus::MethodNotAllowed.to_string(),
+            "405 Method Not Allowed"
         );
+        assert_eq!(
+            &HttpStatus::MovedPermanently.to_string(),
+            "301 Moved Permanently"
+        );
+        assert_eq!(
+            &HttpStatus::MultipleChoices.to_string(),
+            "300 Multiple Choices"
+        );
+        assert_eq!(&HttpStatus::NoContent.to_string(), "204 No Content");
+        assert_eq!(
+            &HttpStatus::NonAuthoritativeInformation.to_string(),
+            "203 No Authoritative Information"
+        );
+        assert_eq!(&HttpStatus::NotAcceptable.to_string(), "406 Not Acceptable");
+        assert_eq!(&HttpStatus::NotFound.to_string(), "404 Not Found");
+        assert_eq!(
+            &HttpStatus::NotImplemented.to_string(),
+            "501 Not Implemented"
+        );
+        assert_eq!(&HttpStatus::NotModified.to_string(), "304 NotModified");
+        assert_eq!(&HttpStatus::OK.to_string(), "200 OK");
+        assert_eq!(
+            &HttpStatus::PartialContent.to_string(),
+            "206 Partial Content"
+        );
+        assert_eq!(
+            &HttpStatus::PaymentRequired.to_string(),
+            "402 Payment Required"
+        );
+        assert_eq!(
+            &HttpStatus::PreconditionFailed.to_string(),
+            "412 Precondition Failed"
+        );
+        assert_eq!(
+            &HttpStatus::ProxyAuthenticationRequired.to_string(),
+            "407 Prozy Authentication Required",
+        );
+        assert_eq!(
+            &HttpStatus::RequestEntityTooLarge.to_string(),
+            "413 Request Entity Too Large"
+        );
+        assert_eq!(
+            &HttpStatus::RequestTimeout.to_string(),
+            "408 Request Timeout"
+        );
+        assert_eq!(
+            &HttpStatus::RequestUriTooLong.to_string(),
+            "414 Request URI Too Long"
+        );
+        assert_eq!(
+            &HttpStatus::RequestedRangeNotSatisfiable.to_string(),
+            "416 Requested Range Not Satisfiable"
+        );
+        assert_eq!(&HttpStatus::ResetContent.to_string(), "205 Reset Content");
+        assert_eq!(&HttpStatus::SeeOther.to_string(), "303 See Other");
+        assert_eq!(
+            &HttpStatus::ServiceUnavailable.to_string(),
+            "503 Service Unavailable"
+        );
+        assert_eq!(
+            &HttpStatus::SwitchingProtocols.to_string(),
+            "101 Switching Protocols"
+        );
+        assert_eq!(
+            &HttpStatus::TemporaryRedirect.to_string(),
+            "307 Temporary Redirect"
+        );
+        assert_eq!(&HttpStatus::Unauthorized.to_string(), "401 Unauthorized");
+        assert_eq!(
+            &HttpStatus::UnsupportedMediaType.to_string(),
+            "415 Unsupported Media Type"
+        );
+        assert_eq!(&HttpStatus::UseProxy.to_string(), "305 Use Proxy");
         assert_eq!(&HttpStatus::Unknown(899).to_string(), "899");
     }
 
     #[test]
     fn parse_display_round_trip() {
         assert_eq!(
-            &"301 Moved Permanently"
+            "202 Accepted".parse::<HttpStatus>().unwrap().to_string(),
+            "202 Accepted"
+        );
+        assert_eq!(
+            "502 Bad Gateway".parse::<HttpStatus>().unwrap().to_string(),
+            "502 Bad Gateway"
+        );
+        assert_eq!(
+            "400 Bad Request".parse::<HttpStatus>().unwrap().to_string(),
+            "400 Bad Request"
+        );
+        assert_eq!(
+            "409 Conflict".parse::<HttpStatus>().unwrap().to_string(),
+            "409 Conflict"
+        );
+        assert_eq!(
+            "100 Continue".parse::<HttpStatus>().unwrap().to_string(),
+            "100 Continue"
+        );
+        assert_eq!(
+            "201 Created".parse::<HttpStatus>().unwrap().to_string(),
+            "201 Created"
+        );
+        assert_eq!(
+            "417 Expectation Failed"
                 .parse::<HttpStatus>()
                 .unwrap()
                 .to_string(),
-            "301 Moved Permanently"
+            "417 Expectation Failed"
         );
         assert_eq!(
-            &"200 OK".parse::<HttpStatus>().unwrap().to_string(),
-            "200 OK"
+            "403 Forbidden".parse::<HttpStatus>().unwrap().to_string(),
+            "403 Forbidden"
         );
         assert_eq!(
-            &"405 Method Not Allowed"
+            "302 Found".parse::<HttpStatus>().unwrap().to_string(),
+            "302 Found"
+        );
+        assert_eq!(
+            "504 Gateway Timeout"
                 .parse::<HttpStatus>()
                 .unwrap()
                 .to_string(),
-            "405 Method Not Allowed"
+            "504 Gateway Timeout"
         );
         assert_eq!(
-            &"411 Length Required"
+            "410 Gone".parse::<HttpStatus>().unwrap().to_string(),
+            "410 Gone"
+        );
+        assert_eq!(
+            "505 HTTP Version Not Supported"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "505 HTTP Version Not Supported"
+        );
+        assert_eq!(
+            "500 Internal Server Error"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "500 Internal Server Error"
+        );
+        assert_eq!(
+            "411 Length Required"
                 .parse::<HttpStatus>()
                 .unwrap()
                 .to_string(),
             "411 Length Required"
         );
         assert_eq!(
-            &"500 Internal Server Error"
+            "405 Method Not Allowed"
                 .parse::<HttpStatus>()
                 .unwrap()
                 .to_string(),
-            "500 Internal Server Error"
+            "405 Method Not Allowed"
+        );
+        assert_eq!(
+            "301 Moved Permanently"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "301 Moved Permanently"
+        );
+        assert_eq!(
+            "300 Multiple Choices"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "300 Multiple Choices"
+        );
+        assert_eq!(
+            "204 No Content".parse::<HttpStatus>().unwrap().to_string(),
+            "204 No Content"
+        );
+        assert_eq!(
+            "203 No Authoritative Information"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "203 No Authoritative Information"
+        );
+        assert_eq!(
+            "406 Not Acceptable"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "406 Not Acceptable"
+        );
+        assert_eq!(
+            "404 Not Found".parse::<HttpStatus>().unwrap().to_string(),
+            "404 Not Found"
+        );
+        assert_eq!(
+            "501 Not Implemented"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "501 Not Implemented"
+        );
+        assert_eq!(
+            "304 NotModified".parse::<HttpStatus>().unwrap().to_string(),
+            "304 NotModified"
+        );
+        assert_eq!(
+            "200 OK".parse::<HttpStatus>().unwrap().to_string(),
+            "200 OK"
+        );
+        assert_eq!(
+            "206 Partial Content"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "206 Partial Content"
+        );
+        assert_eq!(
+            "402 Payment Required"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "402 Payment Required"
+        );
+        assert_eq!(
+            "412 Precondition Failed"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "412 Precondition Failed"
+        );
+        assert_eq!(
+            "407 Prozy Authentication Required"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "407 Prozy Authentication Required"
+        );
+        assert_eq!(
+            "413 Request Entity Too Large"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "413 Request Entity Too Large"
+        );
+        assert_eq!(
+            "408 Request Timeout"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "408 Request Timeout"
+        );
+        assert_eq!(
+            "414 Request URI Too Long"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "414 Request URI Too Long"
+        );
+        assert_eq!(
+            "416 Requested Range Not Satisfiable"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "416 Requested Range Not Satisfiable"
+        );
+        assert_eq!(
+            "205 Reset Content"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "205 Reset Content"
+        );
+        assert_eq!(
+            "303 See Other".parse::<HttpStatus>().unwrap().to_string(),
+            "303 See Other"
+        );
+        assert_eq!(
+            "503 Service Unavailable"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "503 Service Unavailable"
+        );
+        assert_eq!(
+            "101 Switching Protocols"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "101 Switching Protocols"
+        );
+        assert_eq!(
+            "307 Temporary Redirect"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "307 Temporary Redirect"
+        );
+        assert_eq!(
+            "401 Unauthorized"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "401 Unauthorized"
+        );
+        assert_eq!(
+            "415 Unsupported Media Type"
+                .parse::<HttpStatus>()
+                .unwrap()
+                .to_string(),
+            "415 Unsupported Media Type"
+        );
+        assert_eq!(
+            "305 Use Proxy".parse::<HttpStatus>().unwrap().to_string(),
+            "305 Use Proxy"
         );
         assert_eq!(&"889".parse::<HttpStatus>().unwrap().to_string(), "889");
     }
