@@ -22,4 +22,4 @@ hashbrown = "^0.3"
 openssl = { version = "^0.10", optional = true }
 
 [dev-dependencies]
-structopt = "*"
+structopt = "0.3.7"
