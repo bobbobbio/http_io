@@ -9,6 +9,7 @@ homepage = "https://github.com/bobbobbio/http_io"
 description = """
 A library with limited dependencies containing an HTTP client and server.
 """
+readme = "README.md"
 
 [badges]
 travis-ci = { repository = "bobbobbio/http_io" }
