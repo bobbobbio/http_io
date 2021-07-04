@@ -91,13 +91,13 @@ impl From<crate::error::Error> for HttpResponse<Box<dyn io::Read>> {
 
 /// Represents the ability to accept a new abstract connection.
 pub trait Listen {
-    type stream: io::Read + io::Write;
-    fn accept(&self) -> crate::error::Result<Self::stream>;
+    type Stream: io::Read + io::Write;
+    fn accept(&self) -> crate::error::Result<Self::Stream>;
 }
 
 #[cfg(feature = "std")]
 impl Listen for std::net::TcpListener {
-    type stream = std::net::TcpStream;
+    type Stream = std::net::TcpStream;
     fn accept(&self) -> crate::error::Result<std::net::TcpStream> {
         let (stream, _) = std::net::TcpListener::accept(self)?;
         Ok(stream)
@@ -120,10 +120,10 @@ impl<L: Listen> SslListener<L> {
 #[cfg(feature = "openssl")]
 impl<L: Listen> Listen for SslListener<L>
 where
-    <L as Listen>::stream: std::fmt::Debug,
+    <L as Listen>::Stream: std::fmt::Debug,
 {
-    type stream = openssl::ssl::SslStream<<L as Listen>::stream>;
-    fn accept(&self) -> crate::error::Result<Self::stream> {
+    type Stream = openssl::ssl::SslStream<<L as Listen>::Stream>;
+    fn accept(&self) -> crate::error::Result<Self::Stream> {
         let stream = self.listener.accept()?;
         Ok(self.acceptor.accept(stream)?)
     }
@@ -193,12 +193,12 @@ pub trait HttpRequestHandler<I: io::Read> {
 
 /// A simple HTTP server. Not suited for production workloads, better used in tests and small
 /// projects.
-pub struct HttpServer<L: Listen, H: HttpRequestHandler<L::stream>> {
+pub struct HttpServer<L: Listen, H: HttpRequestHandler<L::Stream>> {
     connection_stream: L,
     request_handler: H,
 }
 
-impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
+impl<L: Listen, H: HttpRequestHandler<L::Stream>> HttpServer<L, H> {
     pub fn new(connection_stream: L, request_handler: H) -> Self {
         HttpServer {
             connection_stream,
@@ -222,7 +222,7 @@ impl<L: Listen, H: HttpRequestHandler<L::stream>> HttpServer<L, H> {
     /// Accept one new HTTP stream and serve one request off it.
     pub fn serve_one_inner(
         &mut self,
-        stream: &mut <L as Listen>::stream,
+        stream: &mut <L as Listen>::Stream,
     ) -> HttpResult<HttpResponse<Box<dyn io::Read>>> {
         let request = HttpRequest::deserialize(io::BufReader::new(stream))?;
 

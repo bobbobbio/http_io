@@ -153,22 +153,22 @@ impl HttpRequestBuilder {
 
 /// Represents the ability to connect an abstract stream to some destination address.
 pub trait StreamConnector {
-    type stream: io::Read + io::Write;
-    type stream_addr: Hash + Eq + Clone;
-    fn connect(a: Self::stream_addr) -> Result<Self::stream>;
-    fn to_stream_addr(url: Url) -> Result<Self::stream_addr>;
+    type Stream: io::Read + io::Write;
+    type StreamAddr: Hash + Eq + Clone;
+    fn connect(a: Self::StreamAddr) -> Result<Self::Stream>;
+    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr>;
 }
 
 #[cfg(feature = "std")]
 impl StreamConnector for std::net::TcpStream {
-    type stream = std::net::TcpStream;
-    type stream_addr = std::net::SocketAddr;
+    type Stream = std::net::TcpStream;
+    type StreamAddr = std::net::SocketAddr;
 
-    fn connect(a: Self::stream_addr) -> Result<Self::stream> {
+    fn connect(a: Self::StreamAddr) -> Result<Self::Stream> {
         Ok(std::net::TcpStream::connect(a)?)
     }
 
-    fn to_stream_addr(url: Url) -> Result<Self::stream_addr> {
+    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr> {
         let err = || {
             std::io::Error::new(
                 std::io::ErrorKind::AddrNotAvailable,
@@ -186,7 +186,7 @@ impl StreamConnector for std::net::TcpStream {
 
 /// An HTTP client that keeps connections open.
 pub struct HttpClient<S: StreamConnector> {
-    streams: HashMap<S::stream_addr, S::stream>,
+    streams: HashMap<S::StreamAddr, S::Stream>,
 }
 
 impl<S: StreamConnector> HttpClient<S> {
@@ -198,7 +198,7 @@ impl<S: StreamConnector> HttpClient<S> {
         }
     }
 
-    fn get_socket(&mut self, url: Url) -> Result<&mut S::stream> {
+    fn get_socket(&mut self, url: Url) -> Result<&mut S::Stream> {
         let stream_addr = S::to_stream_addr(url)?;
         if !self.streams.contains_key(&stream_addr) {
             let stream = S::connect(stream_addr.clone())?;
@@ -208,7 +208,7 @@ impl<S: StreamConnector> HttpClient<S> {
     }
 
     /// Execute a GET request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::stream>>
+    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
     where
         <U as TryInto<Url>>::Error: Display,
     {
@@ -219,7 +219,7 @@ impl<S: StreamConnector> HttpClient<S> {
     }
 
     /// Execute a PUT request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::stream>>
+    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
     where
         <U as TryInto<Url>>::Error: Display,
     {
@@ -299,7 +299,7 @@ where
 #[cfg(test)]
 fn get_test<
     L: Listen + Send + 'static,
-    T: HttpRequestHandler<L::stream> + Send + 'static,
+    T: HttpRequestHandler<L::Stream> + Send + 'static,
     F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
 >(
     scheme: Scheme,
@@ -350,7 +350,7 @@ where
 #[cfg(test)]
 fn put_test<
     L: Listen + Send + 'static,
-    T: HttpRequestHandler<L::stream> + Send + 'static,
+    T: HttpRequestHandler<L::Stream> + Send + 'static,
     F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
 >(
     scheme: Scheme,
