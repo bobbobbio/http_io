@@ -1435,7 +1435,6 @@ impl<B: io::Read> HttpResponse<B> {
         self.headers.get(key)
     }
 
-    #[cfg(test)]
     pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
         self.headers.insert(key, value);
     }
