@@ -26,10 +26,10 @@
 //!
 //! impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
 //!     type Error = Error;
-//!     fn get(
-//!         &mut self,
+//!     fn get<'a>(
+//!         &'a mut self,
 //!         uri: String,
-//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!     ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>> {
 //!         let path = self.file_root.join(uri.trim_start_matches("/"));
 //!         Ok(HttpResponse::new(
 //!             HttpStatus::OK,
@@ -37,11 +37,11 @@
 //!         ))
 //!     }
 //!
-//!     fn put(
-//!         &mut self,
+//!     fn put<'a>(
+//!         &'a mut self,
 //!         uri: String,
 //!         mut stream: HttpBody<&mut I>,
-//!     ) -> Result<HttpResponse<Box<dyn io::Read>>> {
+//!     ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>> {
 //!         let path = self.file_root.join(uri.trim_start_matches("/"));
 //!         let mut file = std::fs::File::create(path)?;
 //!         io::copy(&mut stream, &mut file)?;
@@ -133,57 +133,72 @@ where
 pub trait HttpRequestHandler<I: io::Read> {
     type Error: Into<HttpResponse<Box<dyn io::Read>>>;
 
-    fn delete(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn delete<'a>(
+        &'a mut self,
+        _uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "DELETE not allowed",
         ))
     }
 
-    fn get(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn get<'a>(
+        &'a mut self,
+        _uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "GET not allowed",
         ))
     }
 
-    fn head(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn head<'a>(
+        &'a mut self,
+        _uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "HEAD not allowed",
         ))
     }
 
-    fn options(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn options<'a>(
+        &'a mut self,
+        _uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "OPTIONS not allowed",
         ))
     }
 
-    fn put(
-        &mut self,
+    fn put<'a>(
+        &'a mut self,
         _uri: String,
         _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "PUT not allowed",
         ))
     }
 
-    fn post(
-        &mut self,
+    fn post<'a>(
+        &'a mut self,
         _uri: String,
         _stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "PUT not allowed",
         ))
     }
 
-    fn trace(&mut self, _uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn trace<'a>(
+        &'a mut self,
+        _uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         Ok(HttpResponse::from_string(
             HttpStatus::MethodNotAllowed,
             "TRACE not allowed",
@@ -220,10 +235,10 @@ impl<L: Listen, H: HttpRequestHandler<L::Stream>> HttpServer<L, H> {
     }
 
     /// Accept one new HTTP stream and serve one request off it.
-    pub fn serve_one_inner(
-        &mut self,
+    pub fn serve_one_inner<'a>(
+        &'a mut self,
         stream: &mut <L as Listen>::Stream,
-    ) -> HttpResult<HttpResponse<Box<dyn io::Read>>> {
+    ) -> HttpResult<HttpResponse<Box<dyn io::Read + 'a>>> {
         let request = HttpRequest::deserialize(io::BufReader::new(stream))?;
 
         match request.method {
@@ -287,7 +302,10 @@ use std::io::Read;
 impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
     type Error = HttpResponse<Box<dyn io::Read>>;
 
-    fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    fn get<'a>(
+        &'a mut self,
+        uri: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Get);
         assert_eq!(request.expected_uri, uri);
@@ -298,11 +316,11 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         ))
     }
 
-    fn put(
-        &mut self,
+    fn put<'a>(
+        &'a mut self,
         uri: String,
         mut stream: HttpBody<&mut I>,
-    ) -> Result<HttpResponse<Box<dyn io::Read>>, Self::Error> {
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
         let request = self.script.remove(0);
         assert_eq!(request.expected_method, HttpMethod::Put);
         assert_eq!(request.expected_uri, uri);
@@ -364,4 +382,59 @@ pub fn test_ssl_server(
     let server = HttpServer::new(stream, handler);
 
     Ok((server_address.port(), server))
+}
+
+#[cfg(test)]
+pub struct LendingHandler {
+    body_data: Vec<u8>,
+}
+
+#[cfg(test)]
+impl LendingHandler {
+    fn new(body_data: Vec<u8>) -> Self {
+        Self { body_data }
+    }
+}
+
+#[cfg(test)]
+impl<I: io::Read> HttpRequestHandler<I> for LendingHandler {
+    type Error = HttpResponse<Box<dyn io::Read>>;
+
+    fn get<'a>(
+        &'a mut self,
+        _: String,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
+        Ok(HttpResponse::new(
+            HttpStatus::OK,
+            Box::new(&self.body_data[..]),
+        ))
+    }
+
+    fn put<'a>(
+        &'a mut self,
+        _: String,
+        _: HttpBody<&mut I>,
+    ) -> Result<HttpResponse<Box<dyn io::Read + 'a>>, Self::Error> {
+        Ok(HttpResponse::new(
+            HttpStatus::OK,
+            Box::new(&self.body_data[..]),
+        ))
+    }
+}
+
+#[test]
+fn server_handler_can_lend_to_stream() {
+    let server_socket = std::net::TcpListener::bind("localhost:0").unwrap();
+    let server_address = server_socket.local_addr().unwrap();
+    let handler = LendingHandler::new(b"hello world"[..].into());
+    let mut server = HttpServer::new(server_socket, handler);
+    std::thread::spawn(move || server.serve_one());
+
+    let url = format!("http://localhost:{}/", server_address.port());
+    let mut res = crate::client::get(&url[..]).unwrap();
+
+    let mut res_data = vec![];
+    res.read_to_end(&mut res_data).unwrap();
+
+    assert_eq!(res_data, b"hello world");
 }
