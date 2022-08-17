@@ -10,7 +10,7 @@
 //!
 //! fn main() -> Result<()> {
 //!     // Stream contents of url to stdout
-//!     let mut body = http_io::client::get("http://www.google.com")?;
+//!     let mut body = http_io::client::get("http://abort.cc")?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
 //!     Ok(())
 //! }
