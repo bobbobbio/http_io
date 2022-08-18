@@ -357,6 +357,8 @@ pub fn test_server(
 
 #[cfg(test)]
 pub fn test_ssl_server(
+    key_file: &str,
+    cert_file: &str,
     script: Vec<ExpectedRequest>,
 ) -> crate::error::Result<(
     u16,
@@ -371,10 +373,10 @@ pub fn test_ssl_server(
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     acceptor
-        .set_private_key_file(manifest_dir.join("test_key.pem"), SslFiletype::PEM)
+        .set_private_key_file(manifest_dir.join(key_file), SslFiletype::PEM)
         .unwrap();
     acceptor
-        .set_certificate_chain_file(manifest_dir.join("test_cert.pem"))
+        .set_certificate_chain_file(manifest_dir.join(cert_file))
         .unwrap();
     acceptor.check_private_key().unwrap();
 

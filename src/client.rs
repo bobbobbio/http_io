@@ -393,15 +393,22 @@ fn http_client_get_request() {
 
 #[test]
 fn get_request_ssl() {
-    get_test(Scheme::Https, test_ssl_server, |a| get(a)).unwrap();
+    get_test(
+        Scheme::Https,
+        |s| test_ssl_server("test_key.pem", "test_cert.pem", s),
+        |a| get(a),
+    )
+    .unwrap();
 }
 
 #[test]
 fn http_client_get_request_ssl() {
     let mut client = HttpClient::<std::net::TcpStream>::new();
-    get_test(Scheme::Https, test_ssl_server, |a| {
-        Ok(client.get(a)?.finish()?.body)
-    })
+    get_test(
+        Scheme::Https,
+        |s| test_ssl_server("test_key.pem", "test_cert.pem", s),
+        |a| Ok(client.get(a)?.finish()?.body),
+    )
     .unwrap();
 }
 
@@ -481,20 +488,27 @@ fn http_client_put_request() {
 
 #[test]
 fn put_request_ssl() {
-    put_test(Scheme::Https, test_ssl_server, |a, b| put(a, b)).unwrap();
+    put_test(
+        Scheme::Https,
+        |s| test_ssl_server("test_key.pem", "test_cert.pem", s),
+        |a, b| put(a, b),
+    )
+    .unwrap();
 }
 
 #[test]
 fn http_client_put_request_ssl() {
     let mut client = HttpClient::<std::net::TcpStream>::new();
-    put_test(Scheme::Https, test_ssl_server, |a, b| {
-        client_put(&mut client, a, b)
-    })
+    put_test(
+        Scheme::Https,
+        |s| test_ssl_server("test_key.pem", "test_cert.pem", s),
+        |a, b| client_put(&mut client, a, b),
+    )
     .unwrap();
 }
 
 #[test]
-fn get_read() {
+fn get_ssl_success() {
     use std::io::Read as _;
 
     let mut client = HttpClient::<std::net::TcpStream>::new();
@@ -507,4 +521,17 @@ fn get_read() {
     let mut body_str = String::new();
     body.read_to_string(&mut body_str).unwrap();
     println!("{body_str}");
+}
+
+#[test]
+fn get_ssl_bad_certificate_name() {
+    // These certificates have a hostname different from localhost, so the hostname verification
+    // should fail.
+    let err = get_test(
+        Scheme::Https,
+        |s| test_ssl_server("test_bad_key.pem", "test_bad_cert.pem", s),
+        |a| get(a),
+    )
+    .unwrap_err();
+    assert!(matches!(err, Error::SslError(_)));
 }
