@@ -155,7 +155,6 @@ fn ssl_stream(
     stream: std::net::TcpStream,
 ) -> Result<openssl::ssl::SslStream<std::net::TcpStream>> {
     use openssl::ssl::{Ssl, SslContext, SslMethod, SslVerifyMode};
-    use openssl::x509::verify::X509CheckFlags;
 
     let mut ctx = SslContext::builder(SslMethod::tls())?;
     ctx.set_default_verify_paths()?;
@@ -169,9 +168,7 @@ fn ssl_stream(
     ctx.set_verify(SslVerifyMode::PEER);
 
     let mut ssl = Ssl::new(&ctx.build())?;
-    ssl.param_mut()
-        .set_hostflags(X509CheckFlags::NO_PARTIAL_WILDCARDS);
-    ssl.param_mut().set_host(host)?;
+    ssl.set_hostname(host)?;
     Ok(ssl.connect(stream)?)
 }
 
@@ -494,4 +491,20 @@ fn http_client_put_request_ssl() {
         client_put(&mut client, a, b)
     })
     .unwrap();
+}
+
+#[test]
+fn get_read() {
+    use std::io::Read as _;
+
+    let mut client = HttpClient::<std::net::TcpStream>::new();
+    let mut body = client
+        .get("https://www.google.com/")
+        .unwrap()
+        .finish()
+        .unwrap()
+        .body;
+    let mut body_str = String::new();
+    body.read_to_string(&mut body_str).unwrap();
+    println!("{body_str}");
 }
