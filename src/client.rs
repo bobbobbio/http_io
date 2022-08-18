@@ -66,8 +66,6 @@ use core::convert::TryInto;
 use core::fmt::Display;
 use core::hash::Hash;
 use hashbrown::HashMap;
-#[cfg(feature = "openssl")]
-use openssl::ssl::{SslConnector, SslMethod};
 
 /// A struct for building up an HTTP request.
 pub struct HttpRequestBuilder {
@@ -230,6 +228,32 @@ impl<S: StreamConnector> HttpClient<S> {
     }
 }
 
+#[cfg(feature = "openssl")]
+fn ssl_stream(
+    host: &str,
+    stream: std::net::TcpStream,
+) -> Result<openssl::ssl::SslStream<std::net::TcpStream>> {
+    use openssl::ssl::{Ssl, SslContext, SslMethod, SslVerifyMode};
+    use openssl::x509::verify::X509CheckFlags;
+
+    let mut ctx = SslContext::builder(SslMethod::tls())?;
+    ctx.set_default_verify_paths()?;
+
+    #[cfg(test)]
+    {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
+    }
+
+    ctx.set_verify(SslVerifyMode::PEER);
+
+    let mut ssl = Ssl::new(&ctx.build())?;
+    ssl.param_mut()
+        .set_hostflags(X509CheckFlags::NO_PARTIAL_WILDCARDS);
+    ssl.param_mut().set_host(host)?;
+    Ok(ssl.connect(stream)?)
+}
+
 #[cfg(feature = "std")]
 fn send_request<R: io::Read>(
     builder: HttpRequestBuilder,
@@ -240,14 +264,7 @@ fn send_request<R: io::Read>(
     let (status, body) = match &url.scheme {
         #[cfg(feature = "openssl")]
         Scheme::Https => {
-            // XXX I need a front-door way to support self-signed certificates.
-            #[allow(unused_mut)]
-            let mut connector = SslConnector::builder(SslMethod::tls())?;
-            #[cfg(test)]
-            connector.set_verify(openssl::ssl::SslVerifyMode::NONE);
-            let connector = connector.build();
-            let stream = connector.connect(&url.authority, stream)?;
-            let mut request = builder.send(stream)?;
+            let mut request = builder.send(ssl_stream(&url.authority, stream)?)?;
             io::copy(&mut body, &mut request)?;
             let response = request.finish()?;
             (
@@ -323,13 +340,13 @@ fn get_test<
 }
 
 #[test]
-fn get_request() -> Result<()> {
-    get_test(Scheme::Http, test_server)
+fn get_request() {
+    get_test(Scheme::Http, test_server).unwrap();
 }
 
 #[test]
-fn get_request_ssl() -> Result<()> {
-    get_test(Scheme::Https, test_ssl_server)
+fn get_request_ssl() {
+    get_test(Scheme::Https, test_ssl_server).unwrap();
 }
 
 /// Execute a PUT request.
@@ -379,11 +396,11 @@ fn put_test<
 }
 
 #[test]
-fn put_request() -> Result<()> {
-    put_test(Scheme::Http, test_server)
+fn put_request() {
+    put_test(Scheme::Http, test_server).unwrap();
 }
 
 #[test]
-fn put_request_ssl() -> Result<()> {
-    put_test(Scheme::Https, test_ssl_server)
+fn put_request_ssl() {
+    put_test(Scheme::Https, test_ssl_server).unwrap();
 }
