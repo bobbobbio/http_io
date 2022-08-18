@@ -55,13 +55,13 @@
 use crate::error::{Error, Result};
 use crate::io;
 #[cfg(feature = "std")]
-use crate::protocol::HttpStatus;
+use crate::protocol::{HttpBody, HttpStatus};
 use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
 #[cfg(feature = "std")]
 use crate::url::Scheme;
 use crate::url::Url;
 #[cfg(not(feature = "std"))]
-use alloc::string::ToString;
+use alloc::string::{String, ToString as _};
 use core::convert::TryInto;
 use core::fmt::Display;
 use core::hash::Hash;
@@ -149,85 +149,6 @@ impl HttpRequestBuilder {
     }
 }
 
-/// Represents the ability to connect an abstract stream to some destination address.
-pub trait StreamConnector {
-    type Stream: io::Read + io::Write;
-    type StreamAddr: Hash + Eq + Clone;
-    fn connect(a: Self::StreamAddr) -> Result<Self::Stream>;
-    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr>;
-}
-
-#[cfg(feature = "std")]
-impl StreamConnector for std::net::TcpStream {
-    type Stream = std::net::TcpStream;
-    type StreamAddr = std::net::SocketAddr;
-
-    fn connect(a: Self::StreamAddr) -> Result<Self::Stream> {
-        Ok(std::net::TcpStream::connect(a)?)
-    }
-
-    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr> {
-        let err = || {
-            std::io::Error::new(
-                std::io::ErrorKind::AddrNotAvailable,
-                format!("Failed to lookup {}", &url.authority),
-            )
-        };
-        Ok(
-            std::net::ToSocketAddrs::to_socket_addrs(&(url.authority.as_ref(), url.port()?))
-                .map_err(|_| err())?
-                .next()
-                .ok_or_else(err)?,
-        )
-    }
-}
-
-/// An HTTP client that keeps connections open.
-pub struct HttpClient<S: StreamConnector> {
-    streams: HashMap<S::StreamAddr, S::Stream>,
-}
-
-impl<S: StreamConnector> HttpClient<S> {
-    /// Create an `HTTPClient`
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            streams: HashMap::new(),
-        }
-    }
-
-    fn get_socket(&mut self, url: Url) -> Result<&mut S::Stream> {
-        let stream_addr = S::to_stream_addr(url)?;
-        if !self.streams.contains_key(&stream_addr) {
-            let stream = S::connect(stream_addr.clone())?;
-            self.streams.insert(stream_addr.clone(), stream);
-        }
-        Ok(self.streams.get_mut(&stream_addr).unwrap())
-    }
-
-    /// Execute a GET request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
-    where
-        <U as TryInto<Url>>::Error: Display,
-    {
-        let url = url
-            .try_into()
-            .map_err(|e| Error::ParseError(e.to_string()))?;
-        Ok(HttpRequestBuilder::get(url.clone())?.send(self.get_socket(url)?)?)
-    }
-
-    /// Execute a PUT request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
-    where
-        <U as TryInto<Url>>::Error: Display,
-    {
-        let url = url
-            .try_into()
-            .map_err(|e| Error::ParseError(e.to_string()))?;
-        Ok(HttpRequestBuilder::put(url.clone())?.send(self.get_socket(url)?)?)
-    }
-}
-
 #[cfg(feature = "openssl")]
 fn ssl_stream(
     host: &str,
@@ -254,43 +175,160 @@ fn ssl_stream(
     Ok(ssl.connect(stream)?)
 }
 
+/// Represents the ability to connect an abstract stream to some destination address.
+pub trait StreamConnector {
+    type Stream: io::Read + io::Write;
+    type StreamAddr: Hash + Eq + Clone;
+    fn connect(a: Self::StreamAddr) -> Result<Self::Stream>;
+    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr>;
+}
+
+pub enum StreamEither<A, B> {
+    A(A),
+    B(B),
+}
+
+impl<A: io::Read, B: io::Read> io::Read for StreamEither<A, B> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::A(a) => a.read(buf),
+            Self::B(b) => b.read(buf),
+        }
+    }
+}
+
+impl<A: io::Write, B: io::Write> io::Write for StreamEither<A, B> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::A(a) => a.write(buf),
+            Self::B(b) => b.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::A(a) => a.flush(),
+            Self::B(b) => b.flush(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct StreamId<Addr> {
+    addr: Addr,
+    host: String,
+    secure: bool,
+}
+
+#[cfg(all(feature = "std", feature = "openssl"))]
+pub type StdTransport =
+    StreamEither<std::net::TcpStream, openssl::ssl::SslStream<std::net::TcpStream>>;
+
+#[cfg(all(feature = "std", not(feature = "openssl")))]
+pub type StdTransport = std::net::TcpStream;
+
+#[cfg(feature = "std")]
+impl StreamConnector for std::net::TcpStream {
+    type Stream = StdTransport;
+    type StreamAddr = StreamId<std::net::SocketAddr>;
+
+    #[cfg(not(feature = "openssl"))]
+    fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
+        Ok(std::net::TcpStream::connect(id.addr)?)
+    }
+
+    #[cfg(feature = "openssl")]
+    fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
+        let s = std::net::TcpStream::connect(id.addr)?;
+        if id.secure {
+            Ok(StreamEither::B(ssl_stream(&id.host, s)?))
+        } else {
+            Ok(StreamEither::A(s))
+        }
+    }
+
+    fn to_stream_addr(url: Url) -> Result<Self::StreamAddr> {
+        let err = || {
+            std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                format!("Failed to lookup {}", &url.authority),
+            )
+        };
+        Ok(StreamId {
+            addr: std::net::ToSocketAddrs::to_socket_addrs(&(url.authority.as_ref(), url.port()?))
+                .map_err(|_| err())?
+                .next()
+                .ok_or_else(err)?,
+            host: url.authority,
+            secure: url.scheme == Scheme::Https,
+        })
+    }
+}
+
+/// An HTTP client that keeps connections open.
+pub struct HttpClient<S: StreamConnector> {
+    streams: HashMap<S::StreamAddr, S::Stream>,
+}
+
+impl<S: StreamConnector> HttpClient<S> {
+    /// Create an `HTTPClient`
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            streams: HashMap::new(),
+        }
+    }
+
+    fn get_stream(&mut self, url: Url) -> Result<&mut S::Stream> {
+        let stream_addr = S::to_stream_addr(url)?;
+        if !self.streams.contains_key(&stream_addr) {
+            let stream = S::connect(stream_addr.clone())?;
+            self.streams.insert(stream_addr.clone(), stream);
+        }
+        Ok(self.streams.get_mut(&stream_addr).unwrap())
+    }
+
+    /// Execute a GET request. The request isn't completed until `OutgoingBody::finish` is called.
+    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
+    where
+        <U as TryInto<Url>>::Error: Display,
+    {
+        let url = url
+            .try_into()
+            .map_err(|e| Error::ParseError(e.to_string()))?;
+        Ok(HttpRequestBuilder::get(url.clone())?.send(self.get_stream(url)?)?)
+    }
+
+    /// Execute a PUT request. The request isn't completed until `OutgoingBody::finish` is called.
+    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
+    where
+        <U as TryInto<Url>>::Error: Display,
+    {
+        let url = url
+            .try_into()
+            .map_err(|e| Error::ParseError(e.to_string()))?;
+        Ok(HttpRequestBuilder::put(url.clone())?.send(self.get_stream(url)?)?)
+    }
+}
+
 #[cfg(feature = "std")]
 fn send_request<R: io::Read>(
     builder: HttpRequestBuilder,
     url: Url,
     mut body: R,
-) -> Result<Box<dyn io::Read>> {
-    let stream = std::net::TcpStream::connect((url.authority.as_ref(), url.port()?))?;
-    let (status, body) = match &url.scheme {
-        #[cfg(feature = "openssl")]
-        Scheme::Https => {
-            let mut request = builder.send(ssl_stream(&url.authority, stream)?)?;
-            io::copy(&mut body, &mut request)?;
-            let response = request.finish()?;
-            (
-                response.status,
-                Box::new(response.body) as Box<dyn io::Read>,
-            )
-        }
-        Scheme::Http => {
-            let mut request = builder.send(stream)?;
-            io::copy(&mut body, &mut request)?;
-            let response = request.finish()?;
-            (
-                response.status,
-                Box::new(response.body) as Box<dyn io::Read>,
-            )
-        }
-        s => {
-            return Err(Error::UnexpectedScheme(s.to_string()));
-        }
-    };
+) -> Result<HttpBody<StdTransport>> {
+    use std::net::TcpStream;
 
-    if status != HttpStatus::OK {
-        return Err(Error::UnexpectedStatus(status));
+    let stream = <TcpStream as StreamConnector>::connect(TcpStream::to_stream_addr(url)?)?;
+    let mut request = builder.send(stream)?;
+    io::copy(&mut body, &mut request)?;
+    let response = request.finish()?;
+
+    if response.status != HttpStatus::OK {
+        return Err(Error::UnexpectedStatus(response.status));
     }
 
-    Ok(body)
+    Ok(response.body)
 }
 
 #[cfg(test)]
@@ -302,7 +340,7 @@ use crate::server::{
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn get<U: TryInto<Url>>(url: U) -> Result<Box<dyn io::Read>>
+pub fn get<U: TryInto<Url>>(url: U) -> Result<HttpBody<StdTransport>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
@@ -317,11 +355,14 @@ where
 fn get_test<
     L: Listen + Send + 'static,
     T: HttpRequestHandler<L::Stream> + Send + 'static,
-    F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+    B: io::Read,
 >(
     scheme: Scheme,
-    server_factory: F,
+    server_factory: impl Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+    requester: impl FnOnce(&str) -> Result<HttpBody<B>>,
 ) -> Result<()> {
+    use std::io::Read as _;
+
     let (port, mut server) = server_factory(vec![ExpectedRequest {
         expected_method: HttpMethod::Get,
         expected_uri: "/".into(),
@@ -330,7 +371,7 @@ fn get_test<
         response_body: "hello from server".into(),
     }])?;
     let handle = std::thread::spawn(move || server.serve_one());
-    let mut body = get(format!("{}://localhost:{}/", scheme, port).as_ref())?;
+    let mut body = requester(format!("{}://localhost:{}/", scheme, port).as_ref())?;
     handle.join().unwrap()?;
 
     let mut body_str = String::new();
@@ -341,19 +382,37 @@ fn get_test<
 
 #[test]
 fn get_request() {
-    get_test(Scheme::Http, test_server).unwrap();
+    get_test(Scheme::Http, test_server, |a| get(a)).unwrap();
+}
+
+#[test]
+fn http_client_get_request() {
+    let mut client = HttpClient::<std::net::TcpStream>::new();
+    get_test(Scheme::Http, test_server, |a| {
+        Ok(client.get(a)?.finish()?.body)
+    })
+    .unwrap();
 }
 
 #[test]
 fn get_request_ssl() {
-    get_test(Scheme::Https, test_ssl_server).unwrap();
+    get_test(Scheme::Https, test_ssl_server, |a| get(a)).unwrap();
+}
+
+#[test]
+fn http_client_get_request_ssl() {
+    let mut client = HttpClient::<std::net::TcpStream>::new();
+    get_test(Scheme::Https, test_ssl_server, |a| {
+        Ok(client.get(a)?.finish()?.body)
+    })
+    .unwrap();
 }
 
 /// Execute a PUT request.
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
 #[cfg(feature = "std")]
-pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<Box<dyn io::Read>>
+pub fn put<U: TryInto<Url>, R: io::Read>(url: U, body: R) -> Result<HttpBody<StdTransport>>
 where
     <U as TryInto<Url>>::Error: Display,
 {
@@ -368,11 +427,14 @@ where
 fn put_test<
     L: Listen + Send + 'static,
     T: HttpRequestHandler<L::Stream> + Send + 'static,
-    F: Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+    B: io::Read,
 >(
     scheme: Scheme,
-    server_factory: F,
+    server_factory: impl Fn(Vec<ExpectedRequest>) -> Result<(u16, HttpServer<L, T>)>,
+    requester: impl FnOnce(&str, &[u8]) -> Result<HttpBody<B>>,
 ) -> Result<()> {
+    use std::io::Read as _;
+
     let (port, mut server) = server_factory(vec![ExpectedRequest {
         expected_method: HttpMethod::Put,
         expected_uri: "/".into(),
@@ -382,7 +444,7 @@ fn put_test<
     }])?;
     let handle = std::thread::spawn(move || server.serve_one());
 
-    let mut incoming_body = put(
+    let mut incoming_body = requester(
         format!("{}://localhost:{}/", scheme, port).as_ref(),
         "hello from client".as_bytes(),
     )?;
@@ -397,10 +459,39 @@ fn put_test<
 
 #[test]
 fn put_request() {
-    put_test(Scheme::Http, test_server).unwrap();
+    put_test(Scheme::Http, test_server, |a, b| put(a, b)).unwrap();
+}
+
+#[cfg(test)]
+fn client_put<'a>(
+    client: &'a mut HttpClient<std::net::TcpStream>,
+    url: &str,
+    mut body: &[u8],
+) -> Result<HttpBody<&'a mut StdTransport>> {
+    let mut out = client.put(url)?;
+    io::copy(&mut body, &mut out)?;
+    Ok(out.finish()?.body)
+}
+
+#[test]
+fn http_client_put_request() {
+    let mut client = HttpClient::<std::net::TcpStream>::new();
+    put_test(Scheme::Http, test_server, |a, b| {
+        client_put(&mut client, a, b)
+    })
+    .unwrap();
 }
 
 #[test]
 fn put_request_ssl() {
-    put_test(Scheme::Https, test_ssl_server).unwrap();
+    put_test(Scheme::Https, test_ssl_server, |a, b| put(a, b)).unwrap();
+}
+
+#[test]
+fn http_client_put_request_ssl() {
+    let mut client = HttpClient::<std::net::TcpStream>::new();
+    put_test(Scheme::Https, test_ssl_server, |a, b| {
+        client_put(&mut client, a, b)
+    })
+    .unwrap();
 }
