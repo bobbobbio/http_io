@@ -40,7 +40,8 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
     fn get(&mut self, uri: String) -> Result<HttpResponse<Box<dyn io::Read>>> {
         let path = self.file_root.join(uri.trim_start_matches("/"));
         println!("Request for {:?}", path);
-        if std::fs::metadata(&path)?.is_dir() {
+        let attrs = std::fs::metadata(&path)?;
+        if attrs.is_dir() {
             let mut file_list = String::new();
             for entry in std::fs::read_dir(&path)? {
                 let entry = entry?;
@@ -70,10 +71,12 @@ impl<I: io::Read> HttpRequestHandler<I> for FileHandler {
                 Box::new(io::Cursor::new(page)),
             ))
         } else {
-            Ok(HttpResponse::new(
+            let mut res = HttpResponse::new(
                 HttpStatus::OK,
-                Box::new(std::fs::File::open(path)?),
-            ))
+                Box::new(std::fs::File::open(path)?) as Box<dyn io::Read>,
+            );
+            res.add_header("Content-Length", attrs.len().to_string());
+            Ok(res)
         }
     }
 
