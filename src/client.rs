@@ -163,11 +163,13 @@ fn ssl_stream(
     {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
+        ctx.set_ca_file(manifest_dir.join("test_bad_cert.pem"))?;
     }
 
     ctx.set_verify(SslVerifyMode::PEER);
 
     let mut ssl = Ssl::new(&ctx.build())?;
+    ssl.param_mut().set_host(host)?;
     ssl.set_hostname(host)?;
     Ok(ssl.connect(stream)?)
 }
@@ -511,16 +513,19 @@ fn http_client_put_request_ssl() {
 fn get_ssl_success() {
     use std::io::Read as _;
 
+    for u in ["https://remi.party/", "https://www.google.com"] {
+        let mut client = HttpClient::<std::net::TcpStream>::new();
+        let mut body = client.get(u).unwrap().finish().unwrap().body;
+        let mut body_str = String::new();
+        body.read_to_string(&mut body_str).unwrap();
+    }
+}
+
+#[test]
+fn get_ssl_failure() {
     let mut client = HttpClient::<std::net::TcpStream>::new();
-    let mut body = client
-        .get("https://www.google.com/")
-        .unwrap()
-        .finish()
-        .unwrap()
-        .body;
-    let mut body_str = String::new();
-    body.read_to_string(&mut body_str).unwrap();
-    println!("{body_str}");
+    let err = client.get("https://abort.cc/").err().unwrap();
+    assert!(matches!(err, Error::SslError(_)));
 }
 
 #[test]
