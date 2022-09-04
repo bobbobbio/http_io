@@ -1,4 +1,7 @@
-# http_io
+# http_io [![Latest Version]][crates.io]
+
+[Latest Version]: https://img.shields.io/crates/v/http_io.svg
+[crates.io]: https://crates.io/crates/http_io
 
 Crate containing HTTP client and server.
 
