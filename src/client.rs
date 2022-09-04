@@ -149,7 +149,7 @@ impl HttpRequestBuilder {
     }
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "ssl")]
 fn ssl_stream(
     host: &str,
     stream: std::net::TcpStream,
@@ -219,11 +219,11 @@ pub struct StreamId<Addr> {
     secure: bool,
 }
 
-#[cfg(all(feature = "std", feature = "openssl"))]
+#[cfg(all(feature = "std", feature = "ssl"))]
 pub type StdTransport =
     StreamEither<std::net::TcpStream, openssl::ssl::SslStream<std::net::TcpStream>>;
 
-#[cfg(all(feature = "std", not(feature = "openssl")))]
+#[cfg(all(feature = "std", not(feature = "ssl")))]
 pub type StdTransport = std::net::TcpStream;
 
 #[cfg(feature = "std")]
@@ -231,12 +231,12 @@ impl StreamConnector for std::net::TcpStream {
     type Stream = StdTransport;
     type StreamAddr = StreamId<std::net::SocketAddr>;
 
-    #[cfg(not(feature = "openssl"))]
+    #[cfg(not(feature = "ssl"))]
     fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
         Ok(std::net::TcpStream::connect(id.addr)?)
     }
 
-    #[cfg(feature = "openssl")]
+    #[cfg(feature = "ssl")]
     fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
         let s = std::net::TcpStream::connect(id.addr)?;
         if id.secure {

@@ -15,8 +15,9 @@ readme = "README.md"
 travis-ci = { repository = "bobbobbio/http_io" }
 
 [features]
-default = ["std", "openssl"]
+default = ["std", "ssl", "openssl"]
 std = []
+ssl = []
 
 [dependencies]
 hashbrown = "^0.3"

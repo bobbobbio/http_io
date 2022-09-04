@@ -104,20 +104,20 @@ impl Listen for std::net::TcpListener {
     }
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "ssl")]
 pub struct SslListener<L> {
     listener: L,
     acceptor: openssl::ssl::SslAcceptor,
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "ssl")]
 impl<L: Listen> SslListener<L> {
     pub fn new(listener: L, acceptor: openssl::ssl::SslAcceptor) -> Self {
         Self { listener, acceptor }
     }
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(feature = "ssl")]
 impl<L: Listen> Listen for SslListener<L>
 where
     <L as Listen>::Stream: std::fmt::Debug,

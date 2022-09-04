@@ -22,7 +22,8 @@ pub enum Error {
     /// *This variant is available if http_io is built with the `"std"` feature.*
     IoError(std::io::Error),
 
-    #[cfg(feature = "openssl")]
+    #[cfg(feature = "ssl")]
+    /// *This variant is available if http_io is built with the `"ssl"` feature.*
     SslError(String),
 }
 
