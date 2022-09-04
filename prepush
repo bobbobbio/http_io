@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -ex
+
+cargo build
+cargo build --no-default-features
+cargo check
