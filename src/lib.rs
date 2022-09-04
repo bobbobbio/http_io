@@ -16,7 +16,7 @@ pub mod protocol;
 pub mod url;
 
 #[cfg(feature = "ssl")]
-mod ssl;
+pub mod ssl;
 
 #[cfg(not(feature = "std"))]
 mod io;

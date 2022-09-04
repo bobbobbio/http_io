@@ -343,7 +343,7 @@ pub fn test_ssl_server(
     let server_address = server_socket.local_addr()?;
     let handler = TestRequestHandler::new(script);
 
-    let stream = crate::ssl::test_server_listener(key_file, cert_file, server_socket);
+    let stream = crate::ssl::SslListener::new(key_file, cert_file, server_socket).unwrap();
     let server = HttpServer::new(stream, handler);
 
     Ok((server_address.port(), server))
