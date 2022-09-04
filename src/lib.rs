@@ -15,6 +15,9 @@ pub mod error;
 pub mod protocol;
 pub mod url;
 
+#[cfg(feature = "ssl")]
+mod ssl;
+
 #[cfg(not(feature = "std"))]
 mod io;
 

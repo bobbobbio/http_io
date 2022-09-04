@@ -104,31 +104,6 @@ impl Listen for std::net::TcpListener {
     }
 }
 
-#[cfg(feature = "ssl")]
-pub struct SslListener<L> {
-    listener: L,
-    acceptor: openssl::ssl::SslAcceptor,
-}
-
-#[cfg(feature = "ssl")]
-impl<L: Listen> SslListener<L> {
-    pub fn new(listener: L, acceptor: openssl::ssl::SslAcceptor) -> Self {
-        Self { listener, acceptor }
-    }
-}
-
-#[cfg(feature = "ssl")]
-impl<L: Listen> Listen for SslListener<L>
-where
-    <L as Listen>::Stream: std::fmt::Debug,
-{
-    type Stream = openssl::ssl::SslStream<<L as Listen>::Stream>;
-    fn accept(&self) -> crate::error::Result<Self::Stream> {
-        let stream = self.listener.accept()?;
-        Ok(self.acceptor.accept(stream)?)
-    }
-}
-
 /// Represents the ability to service and respond to HTTP requests.
 pub trait HttpRequestHandler<I: io::Read> {
     type Error: Into<HttpResponse<Box<dyn io::Read>>>;
@@ -362,25 +337,13 @@ pub fn test_ssl_server(
     script: Vec<ExpectedRequest>,
 ) -> crate::error::Result<(
     u16,
-    HttpServer<SslListener<std::net::TcpListener>, TestRequestHandler>,
+    HttpServer<crate::ssl::SslListener<std::net::TcpListener>, TestRequestHandler>,
 )> {
-    use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-
     let server_socket = std::net::TcpListener::bind("localhost:0")?;
     let server_address = server_socket.local_addr()?;
     let handler = TestRequestHandler::new(script);
 
-    let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    acceptor
-        .set_private_key_file(manifest_dir.join(key_file), SslFiletype::PEM)
-        .unwrap();
-    acceptor
-        .set_certificate_chain_file(manifest_dir.join(cert_file))
-        .unwrap();
-    acceptor.check_private_key().unwrap();
-
-    let stream = SslListener::new(server_socket, acceptor.build());
+    let stream = crate::ssl::test_server_listener(key_file, cert_file, server_socket);
     let server = HttpServer::new(stream, handler);
 
     Ok((server_address.port(), server))

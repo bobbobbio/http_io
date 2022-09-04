@@ -24,7 +24,7 @@ pub enum Error {
 
     #[cfg(feature = "ssl")]
     /// *This variant is available if http_io is built with the `"ssl"` feature.*
-    SslError(String),
+    SslError(crate::ssl::Error),
 }
 
 pub type Result<R> = core::result::Result<R, Error>;
@@ -71,16 +71,9 @@ impl From<Error> for std::io::Error {
     }
 }
 
-#[cfg(feature = "openssl")]
-impl From<openssl::error::ErrorStack> for Error {
-    fn from(e: openssl::error::ErrorStack) -> Self {
-        Error::SslError(e.to_string())
-    }
-}
-
-#[cfg(feature = "openssl")]
-impl<S: fmt::Debug> From<openssl::ssl::HandshakeError<S>> for Error {
-    fn from(e: openssl::ssl::HandshakeError<S>) -> Self {
-        Error::SslError(e.to_string())
+#[cfg(feature = "ssl")]
+impl From<crate::ssl::Error> for Error {
+    fn from(e: crate::ssl::Error) -> Self {
+        Self::SslError(e)
     }
 }

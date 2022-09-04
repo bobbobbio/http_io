@@ -149,31 +149,6 @@ impl HttpRequestBuilder {
     }
 }
 
-#[cfg(feature = "ssl")]
-fn ssl_stream(
-    host: &str,
-    stream: std::net::TcpStream,
-) -> Result<openssl::ssl::SslStream<std::net::TcpStream>> {
-    use openssl::ssl::{Ssl, SslContext, SslMethod, SslVerifyMode};
-
-    let mut ctx = SslContext::builder(SslMethod::tls())?;
-    ctx.set_default_verify_paths()?;
-
-    #[cfg(test)]
-    {
-        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
-        ctx.set_ca_file(manifest_dir.join("test_bad_cert.pem"))?;
-    }
-
-    ctx.set_verify(SslVerifyMode::PEER);
-
-    let mut ssl = Ssl::new(&ctx.build())?;
-    ssl.param_mut().set_host(host)?;
-    ssl.set_hostname(host)?;
-    Ok(ssl.connect(stream)?)
-}
-
 /// Represents the ability to connect an abstract stream to some destination address.
 pub trait StreamConnector {
     type Stream: io::Read + io::Write;
@@ -221,7 +196,7 @@ pub struct StreamId<Addr> {
 
 #[cfg(all(feature = "std", feature = "ssl"))]
 pub type StdTransport =
-    StreamEither<std::net::TcpStream, openssl::ssl::SslStream<std::net::TcpStream>>;
+    StreamEither<std::net::TcpStream, crate::ssl::SslTransport<std::net::TcpStream>>;
 
 #[cfg(all(feature = "std", not(feature = "ssl")))]
 pub type StdTransport = std::net::TcpStream;
@@ -240,7 +215,7 @@ impl StreamConnector for std::net::TcpStream {
     fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
         let s = std::net::TcpStream::connect(id.addr)?;
         if id.secure {
-            Ok(StreamEither::B(ssl_stream(&id.host, s)?))
+            Ok(StreamEither::B(crate::ssl::ssl_stream(&id.host, s)?))
         } else {
             Ok(StreamEither::A(s))
         }
