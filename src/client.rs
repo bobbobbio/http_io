@@ -196,7 +196,7 @@ pub struct StreamId<Addr> {
 
 #[cfg(all(feature = "std", feature = "ssl"))]
 pub type StdTransport =
-    StreamEither<std::net::TcpStream, crate::ssl::SslTransport<std::net::TcpStream>>;
+    StreamEither<std::net::TcpStream, crate::ssl::SslClientStream<std::net::TcpStream>>;
 
 #[cfg(all(feature = "std", not(feature = "ssl")))]
 pub type StdTransport = std::net::TcpStream;
@@ -215,7 +215,9 @@ impl StreamConnector for std::net::TcpStream {
     fn connect(id: Self::StreamAddr) -> Result<Self::Stream> {
         let s = std::net::TcpStream::connect(id.addr)?;
         if id.secure {
-            Ok(StreamEither::B(crate::ssl::ssl_stream(&id.host, s)?))
+            Ok(StreamEither::B(crate::ssl::SslClientStream::new(
+                &id.host, s,
+            )?))
         } else {
             Ok(StreamEither::A(s))
         }

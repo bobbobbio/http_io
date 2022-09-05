@@ -1,29 +1,80 @@
 use super::{Error, Result};
 use crate::server::Listen;
-use std::fmt;
-use std::net::TcpStream;
+use std::{fmt, io};
 
-pub type SslTransport<T> = openssl::ssl::SslStream<T>;
+pub struct SslClientStream<Stream>(openssl::ssl::SslStream<Stream>);
 
-pub fn ssl_stream(host: &str, stream: TcpStream) -> Result<SslTransport<TcpStream>> {
-    use openssl::ssl::{Ssl, SslContext, SslMethod, SslVerifyMode};
+impl<Stream: io::Read + io::Write + fmt::Debug> SslClientStream<Stream> {
+    pub fn new(host: &str, stream: Stream) -> Result<Self> {
+        use openssl::ssl::{Ssl, SslContext, SslMethod, SslVerifyMode};
 
-    let mut ctx = SslContext::builder(SslMethod::tls())?;
-    ctx.set_default_verify_paths()?;
+        let mut ctx = SslContext::builder(SslMethod::tls())?;
+        ctx.set_default_verify_paths()?;
 
-    #[cfg(test)]
-    {
-        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
-        ctx.set_ca_file(manifest_dir.join("test_bad_cert.pem"))?;
+        #[cfg(test)]
+        {
+            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
+            ctx.set_ca_file(manifest_dir.join("test_bad_cert.pem"))?;
+        }
+
+        ctx.set_verify(SslVerifyMode::PEER);
+
+        let mut ssl = Ssl::new(&ctx.build())?;
+        ssl.param_mut().set_host(host)?;
+        ssl.set_hostname(host)?;
+        Ok(Self(ssl.connect(stream)?))
+    }
+}
+
+impl<Stream: io::Read + io::Write> io::Read for SslClientStream<Stream> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
     }
 
-    ctx.set_verify(SslVerifyMode::PEER);
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0.read_vectored(bufs)
+    }
+}
 
-    let mut ssl = Ssl::new(&ctx.build())?;
-    ssl.param_mut().set_host(host)?;
-    ssl.set_hostname(host)?;
-    Ok(ssl.connect(stream)?)
+impl<Stream: io::Read + io::Write> io::Write for SslClientStream<Stream> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.0.write_vectored(bufs)
+    }
+}
+
+pub struct SslServerStream<Stream>(openssl::ssl::SslStream<Stream>);
+
+impl<Stream: io::Read + io::Write> io::Read for SslServerStream<Stream> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0.read_vectored(bufs)
+    }
+}
+
+impl<Stream: io::Read + io::Write> io::Write for SslServerStream<Stream> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.0.write_vectored(bufs)
+    }
 }
 
 pub struct SslListener<L> {
@@ -53,11 +104,13 @@ impl<L: Listen> Listen for SslListener<L>
 where
     <L as Listen>::Stream: fmt::Debug,
 {
-    type Stream = SslTransport<<L as Listen>::Stream>;
+    type Stream = SslServerStream<<L as Listen>::Stream>;
 
     fn accept(&self) -> crate::error::Result<Self::Stream> {
         let stream = self.listener.accept()?;
-        Ok(self.acceptor.accept(stream).map_err(|e| Error::from(e))?)
+        Ok(SslServerStream(
+            self.acceptor.accept(stream).map_err(|e| Error::from(e))?,
+        ))
     }
 }
 
