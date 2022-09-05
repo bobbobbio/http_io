@@ -83,14 +83,15 @@ pub struct SslListener<L> {
 }
 
 impl<L: Listen> SslListener<L> {
-    pub fn new(key_file: &str, cert_file: &str, listener: L) -> Result<Self> {
-        use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-        use std::path::PathBuf;
+    pub fn new(private_key_pem: &[u8], cert_pem: &[u8], listener: L) -> Result<Self> {
+        use openssl::pkey::PKey;
+        use openssl::ssl::{SslAcceptor, SslMethod};
+        use openssl::x509::X509;
 
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls())?;
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        acceptor.set_private_key_file(manifest_dir.join(key_file), SslFiletype::PEM)?;
-        acceptor.set_certificate_chain_file(manifest_dir.join(cert_file))?;
+        acceptor.set_private_key(PKey::private_key_from_pem(private_key_pem)?.as_ref())?;
+        acceptor.set_certificate(X509::from_pem(cert_pem)?.as_ref())?;
+
         acceptor.check_private_key()?;
 
         Ok(Self {

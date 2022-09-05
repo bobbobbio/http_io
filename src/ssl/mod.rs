@@ -7,4 +7,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[path = "openssl.rs"]
 mod inner;
 
+#[cfg(feature = "rustls")]
+#[path = "rustls.rs"]
+mod inner;
+
 pub use inner::*;

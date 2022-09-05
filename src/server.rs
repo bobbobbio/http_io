@@ -343,7 +343,15 @@ pub fn test_ssl_server(
     let server_address = server_socket.local_addr()?;
     let handler = TestRequestHandler::new(script);
 
-    let stream = crate::ssl::SslListener::new(key_file, cert_file, server_socket).unwrap();
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let mut private_key_pem = Vec::new();
+    std::fs::File::open(manifest_dir.join(key_file))?.read_to_end(&mut private_key_pem)?;
+
+    let mut cert_pem = Vec::new();
+    std::fs::File::open(manifest_dir.join(cert_file))?.read_to_end(&mut cert_pem)?;
+
+    let stream = crate::ssl::SslListener::new(&private_key_pem, &cert_pem, server_socket)?;
     let server = HttpServer::new(stream, handler);
 
     Ok((server_address.port(), server))
