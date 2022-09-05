@@ -1,11 +1,7 @@
+use super::{Error, Result};
 use crate::server::Listen;
 use std::fmt;
 use std::net::TcpStream;
-
-#[derive(Debug)]
-pub struct Error(String);
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub type SslTransport<T> = openssl::ssl::SslStream<T>;
 
@@ -57,7 +53,7 @@ impl<L: Listen> Listen for SslListener<L>
 where
     <L as Listen>::Stream: fmt::Debug,
 {
-    type Stream = openssl::ssl::SslStream<<L as Listen>::Stream>;
+    type Stream = SslTransport<<L as Listen>::Stream>;
 
     fn accept(&self) -> crate::error::Result<Self::Stream> {
         let stream = self.listener.accept()?;
