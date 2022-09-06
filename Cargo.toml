@@ -15,7 +15,7 @@ readme = "README.md"
 travis-ci = { repository = "bobbobbio/http_io" }
 
 [features]
-default = ["std", "ssl-openssl"]
+default = ["std", "ssl-native-tls"]
 ssl-openssl = ["ssl", "openssl"]
 ssl-rustls = ["ssl", "rustls", "webpki-roots", "rustls-pemfile"]
 ssl-native-tls = ["ssl", "native-tls"]
