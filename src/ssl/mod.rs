@@ -11,4 +11,8 @@ mod inner;
 #[path = "rustls.rs"]
 mod inner;
 
+#[cfg(feature = "native-tls")]
+#[path = "native_tls.rs"]
+mod inner;
+
 pub use inner::*;

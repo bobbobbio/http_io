@@ -18,6 +18,7 @@ travis-ci = { repository = "bobbobbio/http_io" }
 default = ["std", "ssl-openssl"]
 ssl-openssl = ["ssl", "openssl"]
 ssl-rustls = ["ssl", "rustls", "webpki-roots", "rustls-pemfile"]
+ssl-native-tls = ["ssl", "native-tls"]
 std = []
 ssl = []
 
@@ -27,6 +28,7 @@ openssl = { version = "^0.10", optional = true }
 rustls = { version = "^0.20.6", optional = true }
 webpki-roots = { version = "^0.22", optional = true }
 rustls-pemfile = { version = "^1.0", optional = true }
+native-tls = { version = "^0.2", optional = true }
 
 [dev-dependencies]
 structopt = "0.3.7"
