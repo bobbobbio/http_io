@@ -32,18 +32,11 @@ fn root_store() -> Result<rustls::RootCertStore> {
     }));
 
     #[cfg(test)]
+    for c in rustls_pemfile::certs(&mut io::BufReader::new(&read_test_cert("test_ca.pem")?[..]))?
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
     {
-        for pem in [
-            read_test_cert("test_cert.pem")?,
-            read_test_cert("test_bad_cert.pem")?,
-        ] {
-            for c in rustls_pemfile::certs(&mut io::BufReader::new(&pem[..]))?
-                .iter()
-                .map(|v| rustls::Certificate(v.clone()))
-            {
-                root_store.add(&c).map_err(|e| Error(e.to_string()))?;
-            }
-        }
+        root_store.add(&c).map_err(|e| Error(e.to_string()))?;
     }
 
     Ok(root_store)
@@ -54,7 +47,7 @@ pub struct SslClientStream<Stream: io::Read + io::Write>(
 );
 
 impl<Stream: io::Read + io::Write> SslClientStream<Stream> {
-    pub fn new(host: &str, stream: Stream) -> Result<Self> {
+    pub fn new(host: &str, mut stream: Stream) -> Result<Self> {
         let config = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_root_certificates(root_store()?)
@@ -62,7 +55,24 @@ impl<Stream: io::Read + io::Write> SslClientStream<Stream> {
         assert!(config.enable_sni);
 
         let server_name = host.try_into()?;
-        let conn = rustls::ClientConnection::new(Arc::new(config), server_name)?;
+        let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name)?;
+
+        'outer: while conn.is_handshaking() {
+            while conn.wants_write() {
+                assert_ne!(conn.write_tls(&mut stream)?, 0);
+            }
+
+            while conn.is_handshaking() && conn.wants_read() {
+                if conn.read_tls(&mut stream)? == 0 {
+                    break 'outer;
+                }
+                conn.process_new_packets()?;
+            }
+        }
+
+        if conn.is_handshaking() {
+            return Err(Error("SSL handshake failed".into()));
+        }
 
         Ok(Self(rustls::StreamOwned::new(conn, stream)))
     }
@@ -158,16 +168,17 @@ impl<L: Listen> SslListener<L> {
             .ok_or(Error("failed to accept TLS connection".into()))?;
         let mut conn = accepted.into_connection(self.config.clone())?;
 
-        while conn.wants_read() {
-            if conn.read_tls(&mut stream)? == 0 {
-                break;
+        'outer: while conn.is_handshaking() {
+            while conn.is_handshaking() && conn.wants_read() {
+                if conn.read_tls(&mut stream)? == 0 {
+                    break 'outer;
+                }
+                conn.process_new_packets()?;
             }
-            conn.process_new_packets()?;
-        }
 
-        while conn.wants_write() {
-            assert_ne!(conn.write_tls(&mut stream)?, 0);
-            conn.process_new_packets()?;
+            while conn.wants_write() {
+                assert_ne!(conn.write_tls(&mut stream)?, 0);
+            }
         }
 
         if conn.is_handshaking() {

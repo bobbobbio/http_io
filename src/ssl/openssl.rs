@@ -14,8 +14,7 @@ impl<Stream: io::Read + io::Write + fmt::Debug> SslClientStream<Stream> {
         #[cfg(test)]
         {
             let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            ctx.set_ca_file(manifest_dir.join("test_cert.pem"))?;
-            ctx.set_ca_file(manifest_dir.join("test_bad_cert.pem"))?;
+            ctx.set_ca_file(manifest_dir.join("test_ca.pem"))?;
         }
 
         ctx.set_verify(SslVerifyMode::PEER);

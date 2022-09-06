@@ -10,6 +10,4 @@ cargo check
 
 cargo test
 cargo test --no-default-features --features std,ssl-native-tls
-
-# sadly not fully working yet
-# cargo test --no-default-features --features std,ssl-rustls
+cargo test --no-default-features --features std,ssl-rustls

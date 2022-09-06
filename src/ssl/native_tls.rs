@@ -22,9 +22,9 @@ impl<Stream: io::Read + io::Write + fmt::Debug + 'static> SslClientStream<Stream
         let mut builder = native_tls::TlsConnector::builder();
 
         #[cfg(test)]
-        for c in ["test_cert.pem", "test_bad_cert.pem"] {
-            builder.add_root_certificate(native_tls::Certificate::from_pem(&read_test_cert(c)?)?);
-        }
+        builder.add_root_certificate(native_tls::Certificate::from_pem(&read_test_cert(
+            "test_ca.pem",
+        )?)?);
 
         let connector = builder.build()?;
         Ok(Self(connector.connect(host, stream)?))
