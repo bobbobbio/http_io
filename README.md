@@ -30,3 +30,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 ```
+
+## Choosing an TLS backend
+
+By default `http_io` uses [`native-tls`](https://crates.io/crates/native-tls) as its library for TLS (HTTP support). It supports two other TLS libraries, [`rustls`](https://crates.io/crates/rustls) and [`openssl`](https://crates.io/crates/openssl). These other "back-ends" can be selected using feaures
+
+```bash
+$ # If you want to use `rustls`:
+$ cargo build --no-default-features --features std,ssl-rustls
+$ # If you want to use `openssl`:
+$ cargo build --no-default-features --features std,ssl-rustls
+```
