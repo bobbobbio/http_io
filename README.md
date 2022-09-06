@@ -39,5 +39,5 @@ By default `http_io` uses [`native-tls`](https://crates.io/crates/native-tls) as
 $ # If you want to use `rustls`:
 $ cargo build --no-default-features --features std,ssl-rustls
 $ # If you want to use `openssl`:
-$ cargo build --no-default-features --features std,ssl-rustls
+$ cargo build --no-default-features --features std,ssl-openssl
 ```
