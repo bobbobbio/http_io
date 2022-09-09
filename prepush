@@ -11,3 +11,6 @@ cargo check
 cargo test
 cargo test --no-default-features --features std,ssl-openssl
 cargo test --no-default-features --features std,ssl-rustls
+
+cargo run --example readme
+cargo run --example connection_reuse
