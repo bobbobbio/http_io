@@ -56,7 +56,7 @@ use crate::error::{Error, Result};
 use crate::io;
 #[cfg(feature = "std")]
 use crate::protocol::{HttpBody, HttpStatus};
-use crate::protocol::{HttpMethod, HttpRequest, OutgoingBody};
+use crate::protocol::{HttpMethod, HttpRequest, OutgoingRequest};
 #[cfg(feature = "std")]
 use crate::url::Scheme;
 use crate::url::Url;
@@ -133,12 +133,14 @@ impl HttpRequestBuilder {
         request.add_header("Host", url.authority.clone());
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
-        request.add_header("Transfer-Encoding", "chunked");
+        if method.has_body() {
+            request.add_header("Transfer-Encoding", "chunked");
+        }
         Ok(HttpRequestBuilder { request })
     }
 
     /// Send the built request on the given socket
-    pub fn send<S: io::Read + io::Write>(self, socket: S) -> Result<OutgoingBody<S>> {
+    pub fn send<S: io::Read + io::Write>(self, socket: S) -> Result<OutgoingRequest<S>> {
         self.request.serialize(io::BufWriter::new(socket))
     }
 
@@ -264,8 +266,9 @@ impl<S: StreamConnector> HttpClient<S> {
         Ok(self.streams.get_mut(&stream_addr).unwrap())
     }
 
-    /// Execute a GET request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
+    /// Execute a GET request. The request isn't completed until `OutgoingRequest::finish` is
+    /// called.
+    pub fn get<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingRequest<&mut S::Stream>>
     where
         <U as TryInto<Url>>::Error: Display,
     {
@@ -275,8 +278,9 @@ impl<S: StreamConnector> HttpClient<S> {
         Ok(HttpRequestBuilder::get(url.clone())?.send(self.get_stream(url)?)?)
     }
 
-    /// Execute a PUT request. The request isn't completed until `OutgoingBody::finish` is called.
-    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingBody<&mut S::Stream>>
+    /// Execute a PUT request. The request isn't completed until `OutgoingRequest::finish` is
+    /// called.
+    pub fn put<U: TryInto<Url>>(&mut self, url: U) -> Result<OutgoingRequest<&mut S::Stream>>
     where
         <U as TryInto<Url>>::Error: Display,
     {
@@ -493,8 +497,8 @@ fn get_ssl_success() {
     for u in ["https://remi.party/", "https://www.google.com"] {
         let mut client = HttpClient::<std::net::TcpStream>::new();
         let mut body = client.get(u).unwrap().finish().unwrap().body;
-        let mut body_str = String::new();
-        body.read_to_string(&mut body_str).unwrap();
+        let mut body_bytes = Vec::new();
+        body.read_to_end(&mut body_bytes).unwrap();
     }
 }
 

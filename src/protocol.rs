@@ -1506,6 +1506,15 @@ impl fmt::Display for HttpMethod {
     }
 }
 
+impl HttpMethod {
+    pub fn has_body(&self) -> bool {
+        match self {
+            Self::Delete | Self::Post | Self::Put => true,
+            Self::Trace | Self::Get | Self::Head | Self::Options => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod http_method_tests {
     use super::HttpMethod;
@@ -1587,6 +1596,53 @@ impl HttpRequest<io::Empty> {
     }
 }
 
+pub enum OutgoingRequest<S: io::Read + io::Write> {
+    NoBody(S),
+    WithBody(OutgoingBody<S>),
+}
+
+impl<S: io::Read + io::Write> OutgoingRequest<S> {
+    fn with_body(socket: io::BufWriter<S>) -> Self {
+        Self::WithBody(OutgoingBody::new(socket))
+    }
+
+    fn with_no_body(socket: S) -> Self {
+        Self::NoBody(socket)
+    }
+
+    pub fn finish(self) -> Result<HttpResponse<S>> {
+        match self {
+            Self::NoBody(mut socket) => {
+                socket.flush()?;
+                Ok(HttpResponse::deserialize(socket)?)
+            }
+            Self::WithBody(body) => body.finish(),
+        }
+    }
+}
+
+impl<S: io::Read + io::Write> io::Write for OutgoingRequest<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            #[cfg(feature = "std")]
+            Self::NoBody(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Method does not support a body"),
+            )),
+            #[cfg(not(feature = "std"))]
+            Self::NoBody(_) => Err(Error::Other(format!("Method does not support a body"))),
+            Self::WithBody(b) => b.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::WithBody(b) => b.flush(),
+            _ => Ok(()),
+        }
+    }
+}
+
 pub struct OutgoingBody<S: io::Read + io::Write> {
     socket: io::BufWriter<S>,
 }
@@ -1656,11 +1712,15 @@ impl<B: io::Read> HttpRequest<B> {
     pub fn serialize<S: io::Read + io::Write>(
         &self,
         mut w: io::BufWriter<S>,
-    ) -> Result<OutgoingBody<S>> {
+    ) -> Result<OutgoingRequest<S>> {
         write!(&mut w, "{} {} {}\r\n", self.method, self.uri, self.version)?;
         self.headers.serialize(&mut w)?;
         write!(&mut w, "\r\n")?;
-        Ok(OutgoingBody::new(w))
+        if self.method.has_body() {
+            Ok(OutgoingRequest::with_body(w))
+        } else {
+            Ok(OutgoingRequest::with_no_body(w.into_inner()?))
+        }
     }
 }
 
