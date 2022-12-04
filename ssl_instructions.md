@@ -22,12 +22,12 @@ demoCA/
 
 ```
 
-Generate a private key / certificate to be signed for "localhost"
+Generate a private key / certificate to be signed for "localhost".
 This certificate will be replaced with the signed one later
 
     openssl req -x509 -newkey rsa:4096 -keyout test_key.pem -out test_cert.pem -sha256 -nodes -subj '/CN=localhost'
 
-Generate certificate signing request
+Generate certificate signing request.
 When prompted for "Common Name" enter "localhost"
 
     openssl req -new -sha256 -key test_key.pem -out test_cert.csr.pem -addext "subjectAltName = DNS:localhost"
