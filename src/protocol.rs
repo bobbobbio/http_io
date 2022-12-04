@@ -644,54 +644,173 @@ pub enum HttpStatus {
     Unknown(u32),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum HttpStatusCategory {
+    Informational,
+    Success,
+    Redirection,
+    ClientError,
+    ServerError,
+    Unknown,
+}
+
+impl HttpStatusCategory {
+    fn from_code(code: u32) -> Self {
+        match code {
+            1 => Self::Informational,
+            2 => Self::Success,
+            3 => Self::Redirection,
+            4 => Self::ClientError,
+            5 => Self::ServerError,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl HttpStatus {
+    pub fn to_category(&self) -> HttpStatusCategory {
+        HttpStatusCategory::from_code(self.to_code() / 100)
+    }
+
+    pub fn to_code(&self) -> u32 {
+        match self {
+            Self::Continue => 100,
+            Self::SwitchingProtocols => 101,
+            Self::OK => 200,
+            Self::Created => 201,
+            Self::Accepted => 202,
+            Self::NonAuthoritativeInformation => 203,
+            Self::NoContent => 204,
+            Self::ResetContent => 205,
+            Self::PartialContent => 206,
+            Self::MultipleChoices => 300,
+            Self::MovedPermanently => 301,
+            Self::Found => 302,
+            Self::SeeOther => 303,
+            Self::NotModified => 304,
+            Self::UseProxy => 305,
+            Self::TemporaryRedirect => 307,
+            Self::BadRequest => 400,
+            Self::Unauthorized => 401,
+            Self::PaymentRequired => 402,
+            Self::Forbidden => 403,
+            Self::NotFound => 404,
+            Self::MethodNotAllowed => 405,
+            Self::NotAcceptable => 406,
+            Self::ProxyAuthenticationRequired => 407,
+            Self::RequestTimeout => 408,
+            Self::Conflict => 409,
+            Self::Gone => 410,
+            Self::LengthRequired => 411,
+            Self::PreconditionFailed => 412,
+            Self::RequestEntityTooLarge => 413,
+            Self::RequestUriTooLong => 414,
+            Self::UnsupportedMediaType => 415,
+            Self::RequestedRangeNotSatisfiable => 416,
+            Self::ExpectationFailed => 417,
+            Self::InternalServerError => 500,
+            Self::NotImplemented => 501,
+            Self::BadGateway => 502,
+            Self::ServiceUnavailable => 503,
+            Self::GatewayTimeout => 504,
+            Self::HttpVersionNotSupported => 505,
+            Self::Unknown(c) => *c,
+        }
+    }
+
+    pub fn from_code(code: u32) -> Self {
+        match code {
+            100 => Self::Continue,
+            101 => Self::SwitchingProtocols,
+            200 => Self::OK,
+            201 => Self::Created,
+            202 => Self::Accepted,
+            203 => Self::NonAuthoritativeInformation,
+            204 => Self::NoContent,
+            205 => Self::ResetContent,
+            206 => Self::PartialContent,
+            300 => Self::MultipleChoices,
+            301 => Self::MovedPermanently,
+            302 => Self::Found,
+            303 => Self::SeeOther,
+            304 => Self::NotModified,
+            305 => Self::UseProxy,
+            307 => Self::TemporaryRedirect,
+            400 => Self::BadRequest,
+            401 => Self::Unauthorized,
+            402 => Self::PaymentRequired,
+            403 => Self::Forbidden,
+            404 => Self::NotFound,
+            405 => Self::MethodNotAllowed,
+            406 => Self::NotAcceptable,
+            407 => Self::ProxyAuthenticationRequired,
+            408 => Self::RequestTimeout,
+            409 => Self::Conflict,
+            410 => Self::Gone,
+            411 => Self::LengthRequired,
+            412 => Self::PreconditionFailed,
+            413 => Self::RequestEntityTooLarge,
+            414 => Self::RequestUriTooLong,
+            415 => Self::UnsupportedMediaType,
+            416 => Self::RequestedRangeNotSatisfiable,
+            417 => Self::ExpectationFailed,
+            500 => Self::InternalServerError,
+            501 => Self::NotImplemented,
+            502 => Self::BadGateway,
+            503 => Self::ServiceUnavailable,
+            504 => Self::GatewayTimeout,
+            505 => Self::HttpVersionNotSupported,
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+#[test]
+fn category_from_status_code() {
+    assert_eq!(
+        HttpStatus::Continue.to_category(),
+        HttpStatusCategory::Informational
+    );
+    assert_eq!(
+        HttpStatus::Accepted.to_category(),
+        HttpStatusCategory::Success
+    );
+    assert_eq!(
+        HttpStatus::MovedPermanently.to_category(),
+        HttpStatusCategory::Redirection
+    );
+    assert_eq!(
+        HttpStatus::Forbidden.to_category(),
+        HttpStatusCategory::ClientError
+    );
+    assert_eq!(
+        HttpStatus::InternalServerError.to_category(),
+        HttpStatusCategory::ServerError
+    );
+
+    assert_eq!(
+        HttpStatus::Unknown(200).to_category(),
+        HttpStatusCategory::Success
+    );
+    assert_eq!(
+        HttpStatus::Unknown(700).to_category(),
+        HttpStatusCategory::Unknown
+    );
+}
+
+#[test]
+fn from_code_to_code() {
+    for c in 0..600 {
+        assert_eq!(HttpStatus::from_code(c).to_code(), c);
+    }
+}
+
 impl str::FromStr for HttpStatus {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
         let mut parser = Parser::new(s);
-        match parser.parse_number()? {
-            100 => Ok(HttpStatus::Continue),
-            101 => Ok(HttpStatus::SwitchingProtocols),
-            200 => Ok(HttpStatus::OK),
-            201 => Ok(HttpStatus::Created),
-            202 => Ok(HttpStatus::Accepted),
-            203 => Ok(HttpStatus::NonAuthoritativeInformation),
-            204 => Ok(HttpStatus::NoContent),
-            205 => Ok(HttpStatus::ResetContent),
-            206 => Ok(HttpStatus::PartialContent),
-            300 => Ok(HttpStatus::MultipleChoices),
-            301 => Ok(HttpStatus::MovedPermanently),
-            302 => Ok(HttpStatus::Found),
-            303 => Ok(HttpStatus::SeeOther),
-            304 => Ok(HttpStatus::NotModified),
-            305 => Ok(HttpStatus::UseProxy),
-            307 => Ok(HttpStatus::TemporaryRedirect),
-            400 => Ok(HttpStatus::BadRequest),
-            401 => Ok(HttpStatus::Unauthorized),
-            402 => Ok(HttpStatus::PaymentRequired),
-            403 => Ok(HttpStatus::Forbidden),
-            404 => Ok(HttpStatus::NotFound),
-            405 => Ok(HttpStatus::MethodNotAllowed),
-            406 => Ok(HttpStatus::NotAcceptable),
-            407 => Ok(HttpStatus::ProxyAuthenticationRequired),
-            408 => Ok(HttpStatus::RequestTimeout),
-            409 => Ok(HttpStatus::Conflict),
-            410 => Ok(HttpStatus::Gone),
-            411 => Ok(HttpStatus::LengthRequired),
-            412 => Ok(HttpStatus::PreconditionFailed),
-            413 => Ok(HttpStatus::RequestEntityTooLarge),
-            414 => Ok(HttpStatus::RequestUriTooLong),
-            415 => Ok(HttpStatus::UnsupportedMediaType),
-            416 => Ok(HttpStatus::RequestedRangeNotSatisfiable),
-            417 => Ok(HttpStatus::ExpectationFailed),
-            500 => Ok(HttpStatus::InternalServerError),
-            501 => Ok(HttpStatus::NotImplemented),
-            502 => Ok(HttpStatus::BadGateway),
-            503 => Ok(HttpStatus::ServiceUnavailable),
-            504 => Ok(HttpStatus::GatewayTimeout),
-            505 => Ok(HttpStatus::HttpVersionNotSupported),
-            v => Ok(HttpStatus::Unknown(v)),
-        }
+        Ok(Self::from_code(parser.parse_number()?))
     }
 }
 
