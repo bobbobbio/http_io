@@ -1250,9 +1250,9 @@ struct HttpHeader {
 }
 
 impl HttpHeader {
-    fn new<K: Into<String>, V: Into<String>>(key: K, value: V) -> Self {
+    fn new(key: impl AsRef<str>, value: impl Into<String>) -> Self {
         HttpHeader {
-            key: key.into(),
+            key: key.as_ref().to_lowercase(),
             value: value.into(),
         }
     }
@@ -1263,7 +1263,7 @@ impl HttpHeader {
         parser.expect(": ")?;
         let value = parser.parse_remaining()?;
 
-        Ok(HttpHeader::new(key, value))
+        Ok(HttpHeader::new(key.to_lowercase(), value))
     }
 }
 
@@ -1301,12 +1301,15 @@ impl HttpHeaders {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&str> {
-        self.headers.get(key).map(convert::AsRef::as_ref)
+    pub fn get(&self, key: impl AsRef<str>) -> Option<&str> {
+        self.headers
+            .get(&key.as_ref().to_lowercase())
+            .map(convert::AsRef::as_ref)
     }
 
-    pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
-        self.headers.insert(key.into(), value.into());
+    pub fn insert(&mut self, key: impl AsRef<str>, value: impl Into<String>) {
+        self.headers
+            .insert(key.as_ref().to_lowercase(), value.into());
     }
 
     fn deserialize<R: io::Read>(s: &mut CrLfStream<R>) -> Result<Self> {
@@ -1333,6 +1336,20 @@ impl HttpHeaders {
     }
 }
 
+#[test]
+fn http_headers_case_insensitive() {
+    for k1 in ["FOO", "FoO", "foo"] {
+        let mut headers = HttpHeaders::new();
+        headers.insert(k1, "Bar");
+        headers.insert(String::from(k1), "Bar");
+
+        for k2 in ["FOO", "FoO", "foo"] {
+            assert_eq!(headers.get(k2), Some("Bar"));
+            assert_eq!(headers.get(String::from(k2)), Some("Bar"));
+        }
+    }
+}
+
 impl From<Vec<HttpHeader>> for HttpHeaders {
     fn from(mut headers: Vec<HttpHeader>) -> Self {
         let mut map = BTreeMap::new();
@@ -1350,10 +1367,10 @@ mod http_headers_tests {
 
     #[test]
     fn to_string() {
-        let headers = HttpHeaders::from(vec![HttpHeader::new("a", "b"), HttpHeader::new("c", "d")]);
+        let headers = HttpHeaders::from(vec![HttpHeader::new("A", "B"), HttpHeader::new("c", "d")]);
         let mut data = Vec::new();
         headers.serialize(&mut data).unwrap();
-        assert_eq!(str::from_utf8(&data).unwrap(), "a: b\r\nc: d\r\n");
+        assert_eq!(str::from_utf8(&data).unwrap(), "a: B\r\nc: d\r\n");
     }
 
     #[test]
@@ -1366,7 +1383,7 @@ mod http_headers_tests {
 
     #[test]
     fn deserialize_success() {
-        let mut input = CrLfStream::new("a: b\r\nc: d\r\n\r\n".as_bytes());
+        let mut input = CrLfStream::new("A: b\r\nC: d\r\n\r\n".as_bytes());
         let actual = HttpHeaders::deserialize(&mut input).unwrap();
         let expected =
             HttpHeaders::from(vec![HttpHeader::new("a", "b"), HttpHeader::new("c", "d")]);
@@ -1435,7 +1452,7 @@ impl<B: io::Read> HttpResponse<B> {
         self.headers.get(key)
     }
 
-    pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+    pub fn add_header(&mut self, key: impl AsRef<str>, value: impl Into<String>) {
         self.headers.insert(key, value);
     }
 
@@ -1679,7 +1696,7 @@ impl<S: io::Read + io::Write> OutgoingBody<S> {
 }
 
 impl<B: io::Read> HttpRequest<B> {
-    pub fn add_header<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+    pub fn add_header(&mut self, key: impl AsRef<str>, value: impl Into<String>) {
         self.headers.insert(key, value);
     }
 
