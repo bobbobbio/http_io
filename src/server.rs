@@ -248,6 +248,9 @@ impl<L: Listen, H: HttpRequestHandler<L::Stream>> HttpServer<L, H> {
 }
 
 #[cfg(test)]
+use crate::protocol::HttpHeaders;
+
+#[cfg(test)]
 #[derive(PartialEq, Debug)]
 pub struct ExpectedRequest {
     pub expected_method: HttpMethod,
@@ -256,6 +259,7 @@ pub struct ExpectedRequest {
 
     pub response_status: HttpStatus,
     pub response_body: String,
+    pub response_headers: HttpHeaders,
 }
 
 #[cfg(test)]
@@ -285,10 +289,12 @@ impl<I: io::Read> HttpRequestHandler<I> for TestRequestHandler {
         assert_eq!(request.expected_method, HttpMethod::Get);
         assert_eq!(request.expected_uri, uri);
 
-        Ok(HttpResponse::from_string(
-            request.response_status,
-            request.response_body,
-        ))
+        let mut res = HttpResponse::from_string(request.response_status, request.response_body);
+        for (k, v) in &request.response_headers {
+            res.add_header(k, v.clone());
+        }
+
+        Ok(res)
     }
 
     fn put<'a>(

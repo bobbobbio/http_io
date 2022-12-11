@@ -10,6 +10,7 @@ use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec, vec:
 use core::cmp;
 use core::convert;
 use core::fmt;
+use core::iter;
 use core::str;
 #[cfg(feature = "std")]
 use std::collections::BTreeMap;
@@ -1408,9 +1409,26 @@ mod http_header_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct HttpHeaders {
     headers: BTreeMap<String, String>,
+}
+
+#[macro_export]
+macro_rules! http_headers {
+    ($($key:expr => $value:expr),* ,) => (
+        $crate::hash_map!($($key => $value),*)
+    );
+    ($($key:expr => $value:expr),*) => ({
+        ::core::iter::Iterator::collect::<$crate::protocol::HttpHeaders>(
+            ::core::iter::IntoIterator::into_iter([
+                $((
+                    ::core::convert::From::from($key),
+                    ::core::convert::From::from($value)
+                ),)*
+            ])
+        )
+    });
 }
 
 impl HttpHeaders {
@@ -1452,6 +1470,23 @@ impl HttpHeaders {
             write!(&mut w, "{}: {}\r\n", key, value)?;
         }
         Ok(())
+    }
+}
+
+impl iter::FromIterator<(String, String)> for HttpHeaders {
+    fn from_iter<T: IntoIterator<Item = (String, String)>>(iter: T) -> Self {
+        Self {
+            headers: iter.into_iter().collect(),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a HttpHeaders {
+    type Item = (&'a String, &'a String);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.headers.iter()
     }
 }
 

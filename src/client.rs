@@ -316,6 +316,9 @@ use crate::server::{
     test_server, test_ssl_server, ExpectedRequest, HttpRequestHandler, HttpServer, Listen,
 };
 
+#[cfg(test)]
+use crate::http_headers;
+
 /// Execute a GET request.
 ///
 /// *This function is available if http_io is built with the `"std"` feature.*
@@ -349,6 +352,7 @@ fn get_test<
         expected_body: "".into(),
         response_status: HttpStatus::OK,
         response_body: "hello from server".into(),
+        response_headers: Default::default(),
     }])?;
     let handle = std::thread::spawn(move || server.serve_one());
     let mut body = requester(format!("{}://localhost:{}/", scheme, port).as_ref())?;
@@ -428,6 +432,7 @@ fn put_test<
         expected_body: "hello from client".into(),
         response_status: HttpStatus::OK,
         response_body: "hello from server".into(),
+        response_headers: Default::default(),
     }])?;
     let handle = std::thread::spawn(move || server.serve_one());
 
@@ -520,4 +525,39 @@ fn get_ssl_bad_certificate_name() {
     )
     .unwrap_err();
     assert!(matches!(err, Error::SslError(_)));
+}
+
+#[ignore]
+#[test]
+fn redirect() {
+    use std::io::Read as _;
+
+    let (port, mut server) = test_server(vec![
+        ExpectedRequest {
+            expected_method: HttpMethod::Get,
+            expected_uri: "/".into(),
+            expected_body: "".into(),
+            response_status: HttpStatus::MovedPermanently,
+            response_body: "".into(),
+            response_headers: http_headers! {
+                "Location" => "/next"
+            },
+        },
+        ExpectedRequest {
+            expected_method: HttpMethod::Get,
+            expected_uri: "/next".into(),
+            expected_body: "".into(),
+            response_status: HttpStatus::OK,
+            response_body: "real content".into(),
+            response_headers: Default::default(),
+        },
+    ])
+    .unwrap();
+
+    let handle = std::thread::spawn(move || server.serve_one());
+    let mut body = get(format!("http://localhost:{}/", port).as_ref()).unwrap();
+    handle.join().unwrap().unwrap();
+
+    let mut body_str = String::new();
+    body.read_to_string(&mut body_str).unwrap();
 }
