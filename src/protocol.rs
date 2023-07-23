@@ -6,14 +6,21 @@
 use crate::error::{Error, Result};
 use crate::io::{self, Read, Write};
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::{btree_map::Iter as BTreeMapIter, BTreeMap},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 use core::cmp;
 use core::convert;
 use core::fmt;
 use core::iter;
 use core::str;
 #[cfg(feature = "std")]
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Iter as BTreeMapIter, BTreeMap};
 
 struct HttpBodyChunk<S: io::Read> {
     inner: io::Take<HttpReadTilCloseBody<S>>,
@@ -1483,7 +1490,7 @@ impl iter::FromIterator<(String, String)> for HttpHeaders {
 
 impl<'a> IntoIterator for &'a HttpHeaders {
     type Item = (&'a String, &'a String);
-    type IntoIter = std::collections::btree_map::Iter<'a, String, String>;
+    type IntoIter = BTreeMapIter<'a, String, String>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.headers.iter()

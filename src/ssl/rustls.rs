@@ -161,7 +161,7 @@ impl<L: Listen> SslListener<L> {
         &self,
         mut stream: impl io::Read + io::Write,
     ) -> Result<rustls::ServerConnection> {
-        let mut acceptor = rustls::server::Acceptor::new()?;
+        let mut acceptor = rustls::server::Acceptor::default();
         acceptor.read_tls(&mut stream)?;
         let accepted = acceptor
             .accept()?

@@ -10,7 +10,7 @@
 //!
 //! fn main() -> Result<()> {
 //!     // Stream contents of url to stdout
-//!     let mut body = http_io::client::get("http://abort.cc")?;
+//!     let mut body = http_io::client::get("https://abort.cc")?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
 //!     Ok(())
 //! }
@@ -510,7 +510,8 @@ fn get_ssl_success() {
 #[test]
 fn get_ssl_failure() {
     let mut client = HttpClient::<std::net::TcpStream>::new();
-    let err = client.get("https://abort.cc/").err().unwrap();
+    // This is the IP for abort.cc, should get SSL error due to certificate not containing the IP
+    let err = client.get("https://107.170.193.89/").err().unwrap();
     assert!(matches!(err, Error::SslError(_)));
 }
 

@@ -14,3 +14,5 @@ cargo test --no-default-features --features std,ssl-rustls
 
 cargo run --example readme
 cargo run --example connection_reuse
+
+echo "All tests passed"
