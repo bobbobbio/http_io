@@ -19,10 +19,7 @@ pub mod url;
 pub mod ssl;
 
 #[cfg(not(feature = "std"))]
-mod io;
-
-#[cfg(not(feature = "std"))]
-pub use io::{Read, Write};
+pub mod io;
 
 #[cfg(feature = "std")]
 use std::io;

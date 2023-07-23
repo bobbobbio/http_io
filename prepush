@@ -14,5 +14,6 @@ cargo test --no-default-features --features std,ssl-rustls
 
 cargo run --example readme
 cargo run --example connection_reuse
+cargo run --example no_std --no-default-features -- http://fake.com
 
 echo "All tests passed"
