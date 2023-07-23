@@ -31,4 +31,4 @@ rustls-pemfile = { version = "*", optional = true }
 native-tls = { version = "*", optional = true }
 
 [dev-dependencies]
-structopt = "*"
+clap = { version = "*", features = ["derive"] }

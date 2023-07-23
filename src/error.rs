@@ -29,6 +29,9 @@ pub enum Error {
 
 pub type Result<R> = core::result::Result<R, Error>;
 
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)

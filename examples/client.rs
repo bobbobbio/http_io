@@ -1,21 +1,21 @@
+use clap::Parser;
 use http_io::error::{Error, Result};
 use http_io::protocol::HttpMethod;
 use http_io::url::Url;
 use std::fs::File;
 use std::io;
-use structopt::StructOpt;
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct Options {
-    #[structopt(long = "method", default_value = "GET")]
+    #[clap(long = "method", default_value = "GET")]
     method: HttpMethod,
-    #[structopt(long = "data", default_value = "")]
+    #[clap(long = "data", default_value = "")]
     data: String,
     url: Url,
 }
 
 fn main() -> Result<()> {
-    let opts = Options::from_args();
+    let opts = Options::parse();
     let mut body = match opts.method {
         HttpMethod::Get => http_io::client::get(opts.url)?,
         HttpMethod::Put => {
