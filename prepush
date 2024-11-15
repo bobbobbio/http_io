@@ -15,5 +15,6 @@ cargo test --no-default-features --features std,ssl-rustls
 cargo run --example readme
 cargo run --example connection_reuse
 cargo run --example no_std --no-default-features -- http://fake.com
+cargo build --target thumbv7m-none-eabi --no-default-features
 
 echo "All tests passed"

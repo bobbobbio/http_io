@@ -26,7 +26,7 @@
 //!
 //! fn main() -> Result<()> {
 //!     let url: Url = "http://www.google.com".parse()?;
-//!     let s = TcpStream::connect((url.authority.as_ref(), url.port()?))?;
+//!     let s = TcpStream::connect((url.host_str().unwrap(), url.port_or_known_default().unwrap()))?;
 //!     let mut response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
 //!     println!("{:#?}", response.headers);
 //!     io::copy(&mut response.body, &mut io::stdout())?;
@@ -41,11 +41,10 @@
 //! use std::io;
 //!
 //! fn main() -> Result<()> {
-//!     let url: Url = "http://www.google.com".parse()?;
+//!     let host = "http://www.google.com";
 //!     let mut client = HttpClient::<std::net::TcpStream>::new();
 //!     for path in &["/", "/favicon.ico", "/robots.txt"] {
-//!         let mut url = url.clone();
-//!         url.path = path.parse()?;
+//!         let url = Url::parse(format!("{}{}", host, path).as_str())?;
 //!         io::copy(&mut client.get(url)?.finish()?.body, &mut io::stdout())?;
 //!     }
 //!     Ok(())
@@ -126,11 +125,11 @@ impl HttpRequestBuilder {
     where
         <U as TryInto<Url>>::Error: Display,
     {
-        let url = url
+        let url: Url = url
             .try_into()
             .map_err(|e| Error::ParseError(e.to_string()))?;
         let mut request = HttpRequest::new(method, url.path());
-        request.add_header("Host", url.authority.clone());
+        request.add_header("Host", url.host_str().unwrap().to_string());
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
         if method.has_body() {
@@ -226,19 +225,27 @@ impl StreamConnector for std::net::TcpStream {
     }
 
     fn to_stream_addr(url: Url) -> Result<Self::StreamAddr> {
+        use std::str::FromStr;
+        let Some(host) = url.host_str() else {
+            return Err(crate::error::Error::UrlError(String::from("no host")))
+        };
+        let Some(port) = url.port_or_known_default() else {
+            return Err(crate::error::Error::UrlError(format!("port for {} not known", url.scheme())))
+        };
+        let scheme = Scheme::from_str(url.scheme())?;
         let err = || {
             std::io::Error::new(
                 std::io::ErrorKind::AddrNotAvailable,
-                format!("Failed to lookup {}", &url.authority),
+                format!("Failed to lookup {}", host),
             )
         };
         Ok(StreamId {
-            addr: std::net::ToSocketAddrs::to_socket_addrs(&(url.authority.as_ref(), url.port()?))
+            addr: std::net::ToSocketAddrs::to_socket_addrs(&(host, port))
                 .map_err(|_| err())?
                 .next()
                 .ok_or_else(err)?,
-            host: url.authority,
-            secure: url.scheme == Scheme::Https,
+            host: String::from(host),
+            secure: Scheme::Https.eq(&scheme),
         })
     }
 }
