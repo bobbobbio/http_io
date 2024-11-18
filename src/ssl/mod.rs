@@ -1,4 +1,4 @@
-#[allow(unused)]
+#[allow(dead_code)] // disable warning of not using the String in the Error
 #[derive(Debug)]
 pub struct Error(String);
 

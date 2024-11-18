@@ -1,6 +1,9 @@
 use crate::error::{Error, Result};
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+use core::convert::TryFrom;
 use core::fmt;
 use core::str;
 pub use url::Url;
@@ -37,6 +40,86 @@ impl fmt::Display for Scheme {
     }
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub struct HttpUrl {
+    url: Url,
+    scheme: Scheme,
+    host: String,
+}
+
+impl HttpUrl {
+    pub fn port(&self) -> Result<u16> {
+        match self.url.port_or_known_default() {
+            Some(v) => Ok(v),
+            None => Err(Error::UrlError(format!(
+                "unsupported URL scheme {}: no port and no known default",
+                self.url.scheme()
+            ))),
+        }
+    }
+    pub fn scheme(&self) -> Scheme {
+        self.scheme.clone()
+    }
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+    // give use an option to use the origin url struct and save us from porting too many codes
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+}
+
+impl TryFrom<Url> for HttpUrl {
+    type Error = Error;
+
+    fn try_from(url: Url) -> Result<Self> {
+        use core::str::FromStr;
+
+        let scheme = Scheme::from_str(url.scheme())?;
+        if scheme.ne(&Scheme::Http) && scheme.ne(&Scheme::Https) {
+            return Err(Error::UrlError(format!(
+                "unsupported URL scheme {}",
+                url.scheme()
+            )));
+        };
+        let Some(host) = url.host_str() else {
+            // people can use url.set_host(Option::None) to make host invalid, and currently we
+            // don't support that
+            return Err(Error::UrlError(format!(
+                "unsupported URL scheme {}: no host",
+                url.scheme()
+            )));
+        };
+        Ok(Self {
+            scheme,
+            host: String::from(host),
+            url,
+        })
+    }
+}
+
+impl str::FromStr for HttpUrl {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let url = Url::parse(s).map_err(|err| Error::UrlError(err.to_string()))?;
+        HttpUrl::try_from(url)
+    }
+}
+
+impl TryFrom<&str> for HttpUrl {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl fmt::Display for HttpUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.url.fmt(f)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -220,5 +303,21 @@ mod tests {
         assert_eq!(url.port_or_known_default(), Option::None);
 
         Ok(())
+    }
+
+    fn parse_http_url_test(url: &str, scheme: Scheme, host: &str, port: u16) {
+        let http_url: HttpUrl = url.parse().unwrap();
+        assert_eq!(http_url.scheme(), scheme);
+        assert_eq!(http_url.host(), host);
+        assert_eq!(http_url.port().unwrap(), port);
+    }
+
+    #[test]
+    fn parse_http_url() {
+        // test parse http url from str, mainly watch the scheme, host and port
+        parse_http_url_test("http://a.com/b/c/d", Scheme::Http, "a.com", 80);
+        parse_http_url_test("https://a.com/b/c/d", Scheme::Https, "a.com", 443);
+        parse_http_url_test("http://a.com:9000/b/c/d", Scheme::Http, "a.com", 9000);
+        parse_http_url_test("https://a.com:9000/b/c/d", Scheme::Https, "a.com", 9000);
     }
 }

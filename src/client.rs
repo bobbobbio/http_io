@@ -20,14 +20,14 @@
 //! ```rust
 //! use http_io::client::HttpRequestBuilder;
 //! use http_io::error::Result;
-//! use http_io::url::Url;
+//! use http_io::url::HttpUrl;
 //! use std::io;
 //! use std::net::TcpStream;
 //!
 //! fn main() -> Result<()> {
-//!     let url: Url = "http://www.google.com".parse()?;
-//!     let s = TcpStream::connect((url.host_str().unwrap(), url.port_or_known_default().unwrap()))?;
-//!     let mut response = HttpRequestBuilder::get(url)?.send(s)?.finish()?;
+//!     let http_url: HttpUrl = "http://www.google.com".parse()?;
+//!     let s = TcpStream::connect((http_url.host(), http_url.port()?))?;
+//!     let mut response = HttpRequestBuilder::get(http_url)?.send(s)?.finish()?;
 //!     println!("{:#?}", response.headers);
 //!     io::copy(&mut response.body, &mut io::stdout())?;
 //!     Ok(())
@@ -41,10 +41,11 @@
 //! use std::io;
 //!
 //! fn main() -> Result<()> {
-//!     let host = "http://www.google.com";
+//!     let url = Url::parse("http://www.google.com")?;
 //!     let mut client = HttpClient::<std::net::TcpStream>::new();
 //!     for path in &["/", "/favicon.ico", "/robots.txt"] {
-//!         let url = Url::parse(format!("{}{}", host, path).as_str())?;
+//!         let mut url = url.clone();
+//!         url.set_path(&path);
 //!         io::copy(&mut client.get(url)?.finish()?.body, &mut io::stdout())?;
 //!     }
 //!     Ok(())
@@ -58,7 +59,7 @@ use crate::protocol::{HttpBody, HttpStatus};
 use crate::protocol::{HttpMethod, HttpRequest, OutgoingRequest};
 #[cfg(feature = "std")]
 use crate::url::Scheme;
-use crate::url::Url;
+use crate::url::{HttpUrl, Url};
 #[cfg(not(feature = "std"))]
 use alloc::string::{String, ToString as _};
 use core::convert::TryInto;
@@ -73,63 +74,63 @@ pub struct HttpRequestBuilder {
 
 impl HttpRequestBuilder {
     /// Create a `HttpRequestBuilder` to build a DELETE request
-    pub fn delete<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn delete<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Delete)
     }
 
     /// Create a `HttpRequestBuilder` to build a GET request
-    pub fn get<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn get<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Get)
     }
 
     /// Create a `HttpRequestBuilder` to build a HEAD request
-    pub fn head<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn head<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Head)
     }
 
     /// Create a `HttpRequestBuilder` to build an OPTIONS request
-    pub fn options<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn options<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Options)
     }
 
     /// Create a `HttpRequestBuilder` to build a POST request
-    pub fn post<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn post<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Post)
     }
 
     /// Create a `HttpRequestBuilder` to build a PUT request
-    pub fn put<U: TryInto<Url>>(url: U) -> Result<Self>
+    pub fn put<U: TryInto<HttpUrl>>(url: U) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
         HttpRequestBuilder::new(url, HttpMethod::Put)
     }
 
     /// Create a `HttpRequestBuilder`. May fail if the given url does not parse.
-    pub fn new<U: TryInto<Url>>(url: U, method: HttpMethod) -> Result<Self>
+    pub fn new<U: TryInto<HttpUrl>>(url: U, method: HttpMethod) -> Result<Self>
     where
-        <U as TryInto<Url>>::Error: Display,
+        <U as TryInto<HttpUrl>>::Error: Display,
     {
-        let url: Url = url
+        let url: HttpUrl = url
             .try_into()
             .map_err(|e| Error::ParseError(e.to_string()))?;
-        let mut request = HttpRequest::new(method, url.path());
-        request.add_header("Host", url.host_str().unwrap().to_string());
+        let mut request = HttpRequest::new(method, url.url().path());
+        request.add_header("Host", url.host().to_string());
         request.add_header("User-Agent", "http_io");
         request.add_header("Accept", "*/*");
         if method.has_body() {
@@ -225,27 +226,23 @@ impl StreamConnector for std::net::TcpStream {
     }
 
     fn to_stream_addr(url: Url) -> Result<Self::StreamAddr> {
-        use std::str::FromStr;
-        let Some(host) = url.host_str() else {
-            return Err(crate::error::Error::UrlError(String::from("no host")))
-        };
-        let Some(port) = url.port_or_known_default() else {
-            return Err(crate::error::Error::UrlError(format!("port for {} not known", url.scheme())))
-        };
-        let scheme = Scheme::from_str(url.scheme())?;
+        use core::convert::TryFrom;
+
+        let http_url = HttpUrl::try_from(url)?;
         let err = || {
             std::io::Error::new(
                 std::io::ErrorKind::AddrNotAvailable,
-                format!("Failed to lookup {}", host),
+                format!("Failed to lookup {}", http_url.host()),
             )
         };
+
         Ok(StreamId {
-            addr: std::net::ToSocketAddrs::to_socket_addrs(&(host, port))
+            addr: std::net::ToSocketAddrs::to_socket_addrs(&(http_url.host(), http_url.port()?))
                 .map_err(|_| err())?
                 .next()
                 .ok_or_else(err)?,
-            host: String::from(host),
-            secure: Scheme::Https.eq(&scheme),
+            host: String::from(http_url.host()),
+            secure: Scheme::Https.eq(&http_url.scheme()),
         })
     }
 }

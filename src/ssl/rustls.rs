@@ -22,16 +22,15 @@ fn root_store() -> Result<rustls::RootCertStore> {
         rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject.to_vec(),
             ta.subject_public_key_info.to_vec(),
-            match ta.name_constraints.as_ref() {
-                Some(v) => Option::Some(v.to_vec()),
-                None => Option::None,
-            },
+            ta.name_constraints.as_ref().map(|c| c.to_vec()),
         )
     }));
 
     #[cfg(test)]
     for c in rustls_pemfile::certs(&mut io::BufReader::new(&read_test_cert("test_ca.pem")?[..])) {
-        root_store.add(&rustls::Certificate(c?.to_vec())).map_err(|e| Error(e.to_string()))?;
+        root_store
+            .add(&rustls::Certificate(c?.to_vec()))
+            .map_err(|e| Error(e.to_string()))?;
     }
 
     Ok(root_store)
