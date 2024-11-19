@@ -108,7 +108,7 @@ mod no_std {
         let method: HttpMethod = opts.method.parse()?;
         let url: HttpUrl = opts.url.parse()?;
 
-        let s = MyFakeTcpStream::connect(url.host(), url.port()?)?;
+        let s = MyFakeTcpStream::connect(url.host(), url.port())?;
 
         let mut body = match method {
             HttpMethod::Get => HttpRequestBuilder::get(url)?.send(s)?.finish()?.body,

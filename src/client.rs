@@ -26,7 +26,7 @@
 //!
 //! fn main() -> Result<()> {
 //!     let http_url: HttpUrl = "http://www.google.com".parse()?;
-//!     let s = TcpStream::connect((http_url.host(), http_url.port()?))?;
+//!     let s = TcpStream::connect((http_url.host(), http_url.port()))?;
 //!     let mut response = HttpRequestBuilder::get(http_url)?.send(s)?.finish()?;
 //!     println!("{:#?}", response.headers);
 //!     io::copy(&mut response.body, &mut io::stdout())?;
@@ -237,7 +237,7 @@ impl StreamConnector for std::net::TcpStream {
         };
 
         Ok(StreamId {
-            addr: std::net::ToSocketAddrs::to_socket_addrs(&(http_url.host(), http_url.port()?))
+            addr: std::net::ToSocketAddrs::to_socket_addrs(&(http_url.host(), http_url.port()))
                 .map_err(|_| err())?
                 .next()
                 .ok_or_else(err)?,

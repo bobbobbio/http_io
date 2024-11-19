@@ -48,14 +48,9 @@ pub struct HttpUrl {
 }
 
 impl HttpUrl {
-    pub fn port(&self) -> Result<u16> {
-        match self.url.port_or_known_default() {
-            Some(v) => Ok(v),
-            None => Err(Error::UrlError(format!(
-                "unsupported URL scheme {}: no port and no known default",
-                self.url.scheme()
-            ))),
-        }
+    pub fn port(&self) -> u16 {
+        // this should always go to the happy path as we only have scheme of http and https
+        self.url.port_or_known_default().unwrap()
     }
     pub fn scheme(&self) -> Scheme {
         self.scheme.clone()
@@ -63,10 +58,14 @@ impl HttpUrl {
     pub fn host(&self) -> &str {
         &self.host
     }
-    // give use an option to use the origin url struct and save us from porting too many codes
     pub fn url(&self) -> &Url {
         &self.url
     }
+}
+
+#[inline]
+fn error_unsupported_url_scheme(scheme: &str) -> Error {
+    Error::UrlError(format!("unsupported URL scheme {}", scheme))
 }
 
 impl TryFrom<Url> for HttpUrl {
@@ -76,20 +75,11 @@ impl TryFrom<Url> for HttpUrl {
         use core::str::FromStr;
 
         let scheme = Scheme::from_str(url.scheme())?;
-        if scheme.ne(&Scheme::Http) && scheme.ne(&Scheme::Https) {
-            return Err(Error::UrlError(format!(
-                "unsupported URL scheme {}",
-                url.scheme()
-            )));
+        if scheme != Scheme::Http && scheme != Scheme::Https {
+            return Err(error_unsupported_url_scheme(url.scheme()));
         };
-        let Some(host) = url.host_str() else {
-            // people can use url.set_host(Option::None) to make host invalid, and currently we
-            // don't support that
-            return Err(Error::UrlError(format!(
-                "unsupported URL scheme {}: no host",
-                url.scheme()
-            )));
-        };
+        // host must exist in http and https, and url crate ensure about it, see test check_url_must_have_host
+        let host = url.host_str().unwrap();
         Ok(Self {
             scheme,
             host: String::from(host),
@@ -125,6 +115,7 @@ impl fmt::Display for HttpUrl {
 mod tests {
     extern crate std;
     use super::*;
+    use crate::error::Error;
     use std::str::FromStr;
 
     fn round_trip_test(s: &str) {
@@ -305,19 +296,50 @@ mod tests {
         Ok(())
     }
 
-    fn parse_http_url_test(url: &str, scheme: Scheme, host: &str, port: u16) {
+    fn parse_http_url_from_str_test(url: &str, scheme: Scheme, host: &str, port: u16) {
         let http_url: HttpUrl = url.parse().unwrap();
         assert_eq!(http_url.scheme(), scheme);
         assert_eq!(http_url.host(), host);
-        assert_eq!(http_url.port().unwrap(), port);
+        assert_eq!(http_url.port(), port);
     }
 
     #[test]
-    fn parse_http_url() {
-        // test parse http url from str, mainly watch the scheme, host and port
-        parse_http_url_test("http://a.com/b/c/d", Scheme::Http, "a.com", 80);
-        parse_http_url_test("https://a.com/b/c/d", Scheme::Https, "a.com", 443);
-        parse_http_url_test("http://a.com:9000/b/c/d", Scheme::Http, "a.com", 9000);
-        parse_http_url_test("https://a.com:9000/b/c/d", Scheme::Https, "a.com", 9000);
+    fn parse_http_url_from_str() {
+        parse_http_url_from_str_test("http://a.com/b/c/d", Scheme::Http, "a.com", 80);
+        parse_http_url_from_str_test("https://a.com/b/c/d", Scheme::Https, "a.com", 443);
+        parse_http_url_from_str_test("http://a.com:9000/b/c/d", Scheme::Http, "a.com", 9000);
+        parse_http_url_from_str_test("https://a.com:9000/b/c/d", Scheme::Https, "a.com", 9000);
+    }
+
+    fn parse_http_url_from_invalid_url(url: Url, err: Error) {
+        std::println!("url: {:?}", url);
+        let http_url = HttpUrl::try_from(url);
+        assert!(http_url.is_err());
+        assert_eq!(http_url.unwrap_err().to_string(), err.to_string());
+    }
+    #[test]
+    fn parse_http_url_from_other_scheme() {
+        parse_http_url_from_invalid_url(
+            Url::parse("file:///mnt/sdcard").unwrap(),
+            error_unsupported_url_scheme("file"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("ftp:///mnt/sdcard").unwrap(),
+            error_unsupported_url_scheme("ftp"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("ws://a.com/b/c/d").unwrap(),
+            error_unsupported_url_scheme("ws"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("wss://a.com/b/c/d").unwrap(),
+            error_unsupported_url_scheme("wss"),
+        );
+    }
+    #[test]
+    fn check_url_must_have_host() {
+        let mut url = Url::parse("http://a.com/b/c/d").unwrap();
+        let result = url.set_host(Option::None);
+        assert_eq!(result.unwrap_err(), url::ParseError::EmptyHost);
     }
 }
