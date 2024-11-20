@@ -1,6 +1,6 @@
 use crate::protocol::{HttpMethod, HttpStatus};
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use core::fmt;
 use core::num;
 use core::str;
@@ -78,5 +78,11 @@ impl From<Error> for std::io::Error {
 impl From<crate::ssl::Error> for Error {
     fn from(e: crate::ssl::Error) -> Self {
         Self::SslError(e)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Self::ParseError(e.to_string())
     }
 }

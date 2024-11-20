@@ -26,9 +26,10 @@ ssl = []
 hashbrown = "*"
 openssl = { version = "*", optional = true }
 rustls = { version = "^0.20.8", optional = true }
-webpki-roots = { version = "*", optional = true }
-rustls-pemfile = { version = "*", optional = true }
+webpki-roots = { version = "^0.26.0", optional = true }
+rustls-pemfile = { version = "^2.0.0", optional = true }
 native-tls = { version = "*", optional = true }
+url = { version = "2.5.3", default-features = false }
 
 [dev-dependencies]
 clap = { version = "*", features = ["derive"] }

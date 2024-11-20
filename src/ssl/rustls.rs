@@ -2,12 +2,7 @@ use super::{Error, Result};
 use crate::io;
 use crate::server::Listen;
 use std::convert::TryInto as _;
-
-#[cfg(feature = "std")]
 use std::sync::Arc;
-
-#[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
 
 #[cfg(test)]
 fn read_test_cert(name: &str) -> Result<Vec<u8>> {
@@ -23,20 +18,19 @@ fn read_test_cert(name: &str) -> Result<Vec<u8>> {
 
 fn root_store() -> Result<rustls::RootCertStore> {
     let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
+            ta.subject.to_vec(),
+            ta.subject_public_key_info.to_vec(),
+            ta.name_constraints.as_ref().map(|c| c.to_vec()),
         )
     }));
 
     #[cfg(test)]
-    for c in rustls_pemfile::certs(&mut io::BufReader::new(&read_test_cert("test_ca.pem")?[..]))?
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
-    {
-        root_store.add(&c).map_err(|e| Error(e.to_string()))?;
+    for c in rustls_pemfile::certs(&mut io::BufReader::new(&read_test_cert("test_ca.pem")?[..])) {
+        root_store
+            .add(&rustls::Certificate(c?.to_vec()))
+            .map_err(|e| Error(e.to_string()))?;
     }
 
     Ok(root_store)
@@ -138,13 +132,15 @@ pub struct SslListener<L> {
 impl<L: Listen> SslListener<L> {
     pub fn new(private_key_pem: &[u8], cert_pem: &[u8], listener: L) -> Result<Self> {
         let private_key = rustls::PrivateKey(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(private_key_pem))?[0]
-                .clone(),
+            rustls_pemfile::private_key(&mut io::BufReader::new(private_key_pem))?
+                .unwrap()
+                .secret_der()
+                .to_vec(),
         );
-        let certs = rustls_pemfile::certs(&mut io::BufReader::new(cert_pem))?
-            .iter()
-            .map(|v| rustls::Certificate(v.clone()))
-            .collect();
+        let mut certs = Vec::new();
+        for cert in rustls_pemfile::certs(&mut io::BufReader::new(cert_pem)) {
+            certs.push(rustls::Certificate(cert?.to_vec()));
+        }
 
         let config = rustls::ServerConfig::builder()
             .with_safe_defaults()

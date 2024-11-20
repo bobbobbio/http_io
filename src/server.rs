@@ -59,7 +59,7 @@
 //!         Ok(())
 //!     });
 //!
-//!     let url = format!("http://localhost:{}/src/server.rs", port);
+//!     let url = format!("http://127.0.0.1:{}/src/server.rs", port);
 //!     let mut body = http_io::client::get(url.as_ref())?;
 //!     io::copy(&mut body, &mut std::io::stdout())?;
 //!     handle.join().unwrap()?;

@@ -23,7 +23,7 @@ mod no_std {
     use http_io::error::{Error, Result};
     use http_io::io;
     use http_io::protocol::HttpMethod;
-    use http_io::url::Url;
+    use http_io::url::HttpUrl;
 
     #[derive(Parser)]
     struct Options {
@@ -106,9 +106,9 @@ mod no_std {
 
         // The clap parsing stuff relies on std::error::Error
         let method: HttpMethod = opts.method.parse()?;
-        let url: Url = opts.url.parse()?;
+        let url: HttpUrl = opts.url.parse()?;
 
-        let s = MyFakeTcpStream::connect(url.authority.as_ref(), url.port()?)?;
+        let s = MyFakeTcpStream::connect(url.host(), url.port())?;
 
         let mut body = match method {
             HttpMethod::Get => HttpRequestBuilder::get(url)?.send(s)?.finish()?.body,

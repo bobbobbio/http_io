@@ -1,30 +1,12 @@
-//! A RFC 3986 URL
-//!
-//! # Example
-//! ```rust
-//! use http_io::url;
-//!
-//! let url: url::Url = "http://user:pass@www.google.com:8080/foo?bar#baz".parse().unwrap();
-//! assert_eq!(url.scheme, url::Scheme::Http);
-//! assert_eq!(url.authority, "www.google.com");
-//! assert_eq!(url.port, Some(8080));
-//! assert_eq!(url.path, "/foo".parse().unwrap());
-//! assert_eq!(url.query, Some("bar".into()));
-//! assert_eq!(url.fragment, Some("baz".into()));
-//! assert_eq!(url.user_information, Some("user:pass".into()));
-//! ```
 use crate::error::{Error, Result};
-use crate::protocol::Parser;
 #[cfg(not(feature = "std"))]
-use alloc::{
-    format,
-    string::{String, ToString},
-    vec,
-    vec::Vec,
-};
+use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
 use core::convert::TryFrom;
 use core::fmt;
 use core::str;
+pub use url::Url;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Scheme {
@@ -58,337 +40,87 @@ impl fmt::Display for Scheme {
     }
 }
 
-fn percent_encode_char(c: char) -> String {
-    c.to_string()
-        .bytes()
-        .map(|b| format!("%{:x}", b))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-fn is_unreserved_char(c: char) -> bool {
-    (c >= 'a' && c <= 'z')
-        || (c >= 'A' && c <= 'Z')
-        || (c >= '0' && c <= '9')
-        || c == '-'
-        || c == '.'
-        || c == '_'
-        || c == '~'
-}
-
-fn percent_encode(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if is_unreserved_char(c) {
-                c.to_string()
-            } else {
-                percent_encode_char(c)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-#[test]
-fn percent_encode_unreserved_chars_not_encoded() {
-    let s = "abcdefghijklmnopqrstuvqxyzABCDEFGHIJKLMNOPQRSTUVQXYZ0123456789-._~";
-    assert_eq!(percent_encode(s), s);
-}
-
-#[test]
-fn percent_encode_reserved_chars_encoded() {
-    let s = "abcd/#$@%@(&%&!*@#)$%@!#dsfsdf0932510294";
-    assert_eq!(
-        percent_encode(s),
-        "abcd%2f%23%24%40%25%40%28%26%25%26%21%2a%40%23%29%24%25%40%21%23dsfsdf0932510294"
-    );
-}
-
-#[test]
-fn percent_encode_multi_byte() {
-    assert_eq!(percent_encode("À"), "%c3%80");
-    assert_eq!(percent_encode("ア"), "%e3%82%a2");
-    assert_eq!(percent_encode("💖"), "%f0%9f%92%96");
-}
-
-fn percent_decode(s: &str) -> Result<String> {
-    let mut decoded = vec![];
-    let mut parser = Parser::new(s);
-    while let Some(c) = parser.parse_char().ok() {
-        if c == '%' {
-            let h1 = parser.parse_char()?;
-            let h2 = parser.parse_char()?;
-            decoded.push(u8::from_str_radix(&format!("{}{}", h1, h2), 16)?);
-        } else {
-            decoded.push(c as u8);
-        }
-    }
-    Ok(str::from_utf8(&decoded)?.into())
-}
-
-#[test]
-fn percent_decode_single_byte() {
-    assert_eq!(percent_decode("%2f").unwrap(), "/");
-    assert_eq!(percent_decode("%2F").unwrap(), "/");
-    assert!(percent_decode("%a1").is_err());
-}
-
-#[test]
-fn percent_decode_multi_byte() {
-    assert_eq!(percent_decode("%c3%80").unwrap(), "À");
-    assert_eq!(percent_decode("%e3%82%A2").unwrap(), "ア");
-    assert_eq!(percent_decode("%f0%9f%92%96").unwrap(), "💖");
-}
-
-#[test]
-fn percent_encode_round_trip() {
-    let s = "abcd/#$@%@(&%&!*@#)$%@!#dsfsdf0932510294";
-    assert_eq!(percent_decode(&percent_encode(s)).unwrap(), s);
-}
-
-#[test]
-fn percent_decode_error() {
-    assert!(percent_decode("%FG").is_err());
-}
-
 #[derive(PartialEq, Debug, Clone)]
-pub struct Path {
-    components: Vec<String>,
-    trailing_slash: bool,
+pub struct HttpUrl {
+    url: Url,
+    scheme: Scheme,
+    host: String,
 }
 
-#[cfg(test)]
-impl Path {
-    fn new(components: &[&str], trailing_slash: bool) -> Self {
-        Self {
-            components: components.iter().map(|&c| c.into()).collect(),
-            trailing_slash,
-        }
+impl HttpUrl {
+    pub fn port(&self) -> u16 {
+        // this will never fail because we verified the scheme is HTTP or HTTPS which should always have a port
+        self.url.port_or_known_default().unwrap()
+    }
+    pub fn scheme(&self) -> Scheme {
+        self.scheme.clone()
+    }
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+    pub fn url(&self) -> &Url {
+        &self.url
     }
 }
 
-impl Path {
-    pub fn components(&self) -> impl Iterator<Item = &str> {
-        self.components.iter().map(|c| c.as_str())
-    }
-
-    pub fn trailing_slash(&self) -> bool {
-        self.trailing_slash
-    }
-
-    pub fn push(&mut self, component: &str) {
-        self.components.push(component.into());
-        self.trailing_slash = false;
-    }
+#[inline]
+fn error_unsupported_url_scheme(scheme: &str) -> Error {
+    Error::UrlError(format!("unsupported URL scheme {}", scheme))
 }
 
-#[test]
-fn path_components() {
-    let path = Path::new(&["a", "b", "c"], false);
-    assert_eq!(path.components().collect::<Vec<_>>(), vec!["a", "b", "c"])
-}
+impl TryFrom<Url> for HttpUrl {
+    type Error = Error;
 
-#[test]
-fn path_push() {
-    let mut path = Path::new(&["a", "b"], true);
-    assert_eq!(path.to_string(), "/a/b/");
-    path.push("c");
-    assert_eq!(path.to_string(), "/a/b/c");
-}
+    fn try_from(url: Url) -> Result<Self> {
+        use core::str::FromStr;
 
-impl fmt::Display for Path {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.components.is_empty() {
-            write!(f, "{}", if self.trailing_slash { "/" } else { "" })
-        } else {
-            write!(
-                f,
-                "/{}{}",
-                self.components
-                    .iter()
-                    .map(|c| percent_encode(c.as_ref()))
-                    .collect::<Vec<_>>()
-                    .join("/"),
-                if self.trailing_slash { "/" } else { "" }
-            )
-        }
+        let scheme = Scheme::from_str(url.scheme())?;
+        if scheme != Scheme::Http && scheme != Scheme::Https {
+            return Err(error_unsupported_url_scheme(url.scheme()));
+        };
+        // HTTP and HTTPS URLs must always have a host, see the check_url_must_have_host test
+        let host = url.host_str().unwrap();
+        Ok(Self {
+            scheme,
+            host: String::from(host),
+            url,
+        })
     }
 }
 
-impl str::FromStr for Path {
+impl str::FromStr for HttpUrl {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Ok(Path {
-            components: s
-                .split('/')
-                .filter(|s| !s.is_empty())
-                .map(percent_decode)
-                .collect::<Result<Vec<_>>>()?,
-            trailing_slash: s.ends_with("/"),
-        })
+        let url = Url::parse(s).map_err(|err| Error::UrlError(err.to_string()))?;
+        HttpUrl::try_from(url)
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub struct Url {
-    pub scheme: Scheme,
-    pub authority: String,
-    pub port: Option<u16>,
-    pub path: Path,
-    pub query: Option<String>,
-    pub fragment: Option<String>,
-    pub user_information: Option<String>,
-}
-
-impl Url {
-    #[cfg(test)]
-    fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>, S4: Into<String>>(
-        scheme: Scheme,
-        authority: S1,
-        port: Option<u16>,
-        path: Path,
-        query: Option<S2>,
-        fragment: Option<S3>,
-        user_information: Option<S4>,
-    ) -> Self {
-        Self {
-            scheme,
-            authority: authority.into(),
-            port,
-            path,
-            query: query.map(Into::into),
-            fragment: fragment.map(Into::into),
-            user_information: user_information.map(Into::into),
-        }
-    }
-
-    pub fn path(&self) -> String {
-        format!(
-            "{}{}{}",
-            self.path,
-            self.query
-                .as_ref()
-                .map(|d| format!("?{}", percent_encode(d)))
-                .unwrap_or_else(|| "".into()),
-            self.fragment
-                .as_ref()
-                .map(|d| format!("#{}", percent_encode(d)))
-                .unwrap_or_else(|| "".into()),
-        )
-    }
-
-    pub fn port(&self) -> Result<u16> {
-        if let Some(p) = self.port {
-            return Ok(p);
-        }
-        match &self.scheme {
-            Scheme::Http => Ok(80),
-            Scheme::Https => Ok(443),
-            s => Err(Error::UrlError(format!("port for {} not known", s))),
-        }
-    }
-}
-
-impl TryFrom<&str> for Url {
+impl TryFrom<&str> for HttpUrl {
     type Error = Error;
+
     fn try_from(value: &str) -> Result<Self> {
         value.parse()
     }
 }
 
-impl fmt::Display for Url {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}://{}{}{}{}",
-            self.scheme,
-            self.user_information
-                .as_ref()
-                .map(|d| format!("{}@", d))
-                .unwrap_or_else(|| "".into()),
-            self.authority,
-            self.port
-                .as_ref()
-                .map(|d| format!(":{}", d))
-                .unwrap_or_else(|| "".into()),
-            self.path()
-        )
-    }
-}
-
-impl str::FromStr for Url {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        let mut parser = Parser::new(s);
-
-        let scheme: Scheme = str::parse(parser.parse_until(":")?)?;
-        parser.expect("://")?;
-
-        let user_information = match parser.parse_until("@") {
-            Ok(info) => {
-                parser.expect("@").unwrap();
-                Some(info.into())
-            }
-            _ => None,
-        };
-
-        let authority = parser
-            .parse_until_any(&['/', '?', '#', ':'])
-            .or_else(|_| parser.parse_remaining())?
-            .into();
-
-        let port = match parser.expect(":") {
-            Ok(_) => Some(
-                parser
-                    .parse_until_any(&['/', '?', '#'])
-                    .or_else(|_| parser.parse_remaining())?
-                    .parse()?,
-            ),
-            _ => None,
-        };
-
-        let path = parser
-            .parse_until_any(&['?', '#'])
-            .or_else(|_| parser.parse_remaining())
-            .unwrap_or("")
-            .parse()?;
-
-        let query = match parser.expect("?") {
-            Ok(_) => Some(percent_decode(
-                parser
-                    .parse_until("#")
-                    .or_else(|_| parser.parse_remaining())
-                    .unwrap_or(""),
-            )?),
-            Err(_) => None,
-        };
-
-        let fragment = match parser.expect("#") {
-            Ok(_) => Some(percent_decode(parser.parse_remaining().unwrap_or(""))?),
-            Err(_) => None,
-        };
-
-        Ok(Self {
-            scheme,
-            authority,
-            port,
-            path,
-            query,
-            fragment,
-            user_information,
-        })
+impl fmt::Display for HttpUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.url.fmt(f)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
     use super::*;
+    use crate::error::Error;
+    use std::str::FromStr;
 
     fn round_trip_test(s: &str) {
         let url: Url = str::parse(s).unwrap();
-        assert_eq!(&format!("{}", url), s);
+        assert_eq!(&std::format!("{}", url), s);
     }
 
     #[test]
@@ -413,23 +145,17 @@ mod tests {
         scheme: Scheme,
         authority: &str,
         port: Option<u16>,
-        path: &[&str],
-        trailing_slash: bool,
+        path: &str,
         query: Option<&str>,
         fragment: Option<&str>,
-        user_information: Option<&str>,
     ) {
-        let actual_url: Url = str::parse(input).unwrap();
-        let expected_url = Url::new(
-            scheme,
-            authority,
-            port,
-            Path::new(path, trailing_slash),
-            query,
-            fragment,
-            user_information,
-        );
-        assert_eq!(actual_url, expected_url);
+        let url = Url::parse(input).unwrap();
+        assert_eq!(Scheme::from_str(url.scheme()).unwrap(), scheme);
+        assert_eq!(url.authority(), authority);
+        assert_eq!(url.port(), port);
+        assert_eq!(url.path(), path);
+        assert_eq!(url.query(), query);
+        assert_eq!(url.fragment(), fragment);
     }
 
     #[test]
@@ -439,9 +165,7 @@ mod tests {
             Scheme::Http,
             "google.com",
             None,
-            &[],
-            false,
-            None,
+            "/",
             None,
             None,
         );
@@ -450,9 +174,7 @@ mod tests {
             Scheme::Https,
             "google.com",
             None,
-            &[],
-            true,
-            None,
+            "/",
             None,
             None,
         );
@@ -461,9 +183,7 @@ mod tests {
             Scheme::Https,
             "google.com",
             None,
-            &["a", "b", "c"],
-            true,
-            None,
+            "/a/b/c/",
             None,
             None,
         );
@@ -472,24 +192,7 @@ mod tests {
             Scheme::Other("ftp".into()),
             "www.google.com",
             None,
-            &["a", "b", "c"],
-            false,
-            None,
-            None,
-            None,
-        );
-    }
-
-    #[test]
-    fn parse_path_encoding() {
-        parse_test(
-            "http://google.com/%2ffoo%2fbar",
-            Scheme::Http,
-            "google.com",
-            None,
-            &["/foo/bar"],
-            false,
-            None,
+            "/a/b/c",
             None,
             None,
         );
@@ -502,10 +205,8 @@ mod tests {
             Scheme::Http,
             "google.com",
             None,
-            &[],
-            false,
+            "/",
             Some("foobar"),
-            None,
             None,
         );
     }
@@ -517,11 +218,9 @@ mod tests {
             Scheme::Http,
             "google.com",
             None,
-            &[],
-            false,
+            "/",
             None,
             Some("foobar"),
-            None,
         );
     }
 
@@ -532,11 +231,9 @@ mod tests {
             Scheme::Http,
             "google.com",
             None,
-            &[],
-            false,
+            "/",
             Some("foo"),
             Some("bar"),
-            None,
         );
     }
 
@@ -547,11 +244,9 @@ mod tests {
             Scheme::Http,
             "google.com",
             None,
-            &[],
-            false,
+            "/",
             None,
             Some("bar?foo"),
-            None,
         );
     }
 
@@ -560,13 +255,11 @@ mod tests {
         parse_test(
             "https://user:pass@google.com/something",
             Scheme::Https,
-            "google.com",
+            "user:pass@google.com",
             None,
-            &["something"],
-            false,
+            "/something",
             None,
             None,
-            Some("user:pass"),
         );
     }
 
@@ -575,33 +268,78 @@ mod tests {
         parse_test(
             "http://google.com:8080#foobar",
             Scheme::Http,
-            "google.com",
+            "google.com:8080",
             Some(8080),
-            &[],
-            false,
+            "/",
             None,
             Some("foobar"),
-            None,
         );
     }
 
     #[test]
     fn scheme_to_port() -> Result<()> {
-        let url: Url = "http://google.com".parse()?;
-        assert_eq!(url.port()?, 80);
+        let url = Url::parse("http://google.com").unwrap();
+        assert_eq!(url.port_or_known_default(), Option::Some(80));
 
-        let url: Url = "https://google.com".parse()?;
-        assert_eq!(url.port()?, 443);
+        let url = Url::parse("https://google.com").unwrap();
+        assert_eq!(url.port_or_known_default(), Option::Some(443));
 
-        let url: Url = "http://google.com:9090".parse()?;
-        assert_eq!(url.port()?, 9090);
+        let url = Url::parse("http://google.com:9090").unwrap();
+        assert_eq!(url.port_or_known_default(), Option::Some(9090));
 
-        let url: Url = "file://google.com".parse()?;
-        assert!(url.port().is_err());
+        let url = Url::parse("file://google.com").unwrap();
+        assert_eq!(url.port_or_known_default(), Option::None);
 
-        let url: Url = "derp://google.com".parse()?;
-        assert!(url.port().is_err());
+        let url = Url::parse("derp://google.com").unwrap();
+        assert_eq!(url.port_or_known_default(), Option::None);
 
         Ok(())
+    }
+
+    fn parse_http_url_from_str_test(url: &str, scheme: Scheme, host: &str, port: u16) {
+        let http_url: HttpUrl = url.parse().unwrap();
+        assert_eq!(http_url.scheme(), scheme);
+        assert_eq!(http_url.host(), host);
+        assert_eq!(http_url.port(), port);
+    }
+
+    #[test]
+    fn parse_http_url_from_str() {
+        parse_http_url_from_str_test("http://a.com/b/c/d", Scheme::Http, "a.com", 80);
+        parse_http_url_from_str_test("https://a.com/b/c/d", Scheme::Https, "a.com", 443);
+        parse_http_url_from_str_test("http://a.com:9000/b/c/d", Scheme::Http, "a.com", 9000);
+        parse_http_url_from_str_test("https://a.com:9000/b/c/d", Scheme::Https, "a.com", 9000);
+    }
+
+    fn parse_http_url_from_invalid_url(url: Url, err: Error) {
+        std::println!("url: {:?}", url);
+        let http_url = HttpUrl::try_from(url);
+        assert!(http_url.is_err());
+        assert_eq!(http_url.unwrap_err().to_string(), err.to_string());
+    }
+    #[test]
+    fn parse_http_url_from_other_scheme() {
+        parse_http_url_from_invalid_url(
+            Url::parse("file:///mnt/sdcard").unwrap(),
+            error_unsupported_url_scheme("file"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("ftp:///mnt/sdcard").unwrap(),
+            error_unsupported_url_scheme("ftp"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("ws://a.com/b/c/d").unwrap(),
+            error_unsupported_url_scheme("ws"),
+        );
+        parse_http_url_from_invalid_url(
+            Url::parse("wss://a.com/b/c/d").unwrap(),
+            error_unsupported_url_scheme("wss"),
+        );
+    }
+    #[test]
+    fn check_url_must_have_host() {
+        let mut url = Url::parse("http://a.com/b/c/d").unwrap();
+        let result = url.set_host(Option::None);
+        assert_eq!(result.unwrap_err(), url::ParseError::EmptyHost);
     }
 }
