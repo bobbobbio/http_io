@@ -49,7 +49,7 @@ pub struct HttpUrl {
 
 impl HttpUrl {
     pub fn port(&self) -> u16 {
-        // this should always go to the happy path as we only have scheme of http and https
+        // this will never fail because we verified the scheme is HTTP or HTTPS which should always have a port
         self.url.port_or_known_default().unwrap()
     }
     pub fn scheme(&self) -> Scheme {
@@ -78,7 +78,7 @@ impl TryFrom<Url> for HttpUrl {
         if scheme != Scheme::Http && scheme != Scheme::Https {
             return Err(error_unsupported_url_scheme(url.scheme()));
         };
-        // host must exist in http and https, and url crate ensure about it, see test check_url_must_have_host
+        // HTTP and HTTPS URLs must always have a host, see the check_url_must_have_host test
         let host = url.host_str().unwrap();
         Ok(Self {
             scheme,
